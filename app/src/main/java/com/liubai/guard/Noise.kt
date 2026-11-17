@@ -11,16 +11,26 @@ import kotlin.random.Random
 /** 番茄钟白噪音：全部实时合成，不占安装包体积。 */
 object Noise {
     val KINDS = listOf(
-        "off" to "关", "white" to "白噪音", "pink" to "粉噪音", "brown" to "棕噪音",
-        "rain" to "雨声", "wave" to "海浪", "wind" to "风声", "fire" to "篝火"
+        "off" to "关", "rain" to "雨声", "storm" to "雷雨", "waves" to "海浪", "stream" to "溪流",
+        "wind" to "风声", "fireplace" to "篝火", "summer_night" to "夏夜", "birds" to "鸟鸣",
+        "coffee_shop" to "咖啡馆", "city" to "城市", "train" to "火车", "boat" to "小船",
+        "white" to "白噪音", "pink" to "粉噪音", "brown" to "棕噪音"
     )
+    /** 真实录音（来自 Blanket 项目的 CC0 / CC BY / 公有领域素材），其余为实时合成。 */
+    private val RAW = mapOf(
+        "rain" to R.raw.snd_rain, "storm" to R.raw.snd_storm, "waves" to R.raw.snd_waves, "stream" to R.raw.snd_stream,
+        "wind" to R.raw.snd_wind, "fireplace" to R.raw.snd_fireplace, "summer_night" to R.raw.snd_summer_night,
+        "birds" to R.raw.snd_birds, "coffee_shop" to R.raw.snd_coffee_shop, "city" to R.raw.snd_city,
+        "train" to R.raw.snd_train, "boat" to R.raw.snd_boat
+    )
+    private var player: android.media.MediaPlayer? = null
     private fun p(c: Context) = c.getSharedPreferences("focus", Context.MODE_PRIVATE)
     fun kind(c: Context) = p(c).getString("noise", "off")!!.takeIf { k -> KINDS.any { it.first == k } } ?: "off"
     fun setKind(c: Context, k: String) { p(c).edit().putString("noise", k).apply(); sync(c) }
     fun inBreak(c: Context) = p(c).getBoolean("noiseBreak", false)
     fun setInBreak(c: Context, v: Boolean) { p(c).edit().putBoolean("noiseBreak", v).apply(); sync(c) }
     fun volume(c: Context) = p(c).getInt("noiseVol", 60)
-    fun setVolume(c: Context, v: Int) { p(c).edit().putInt("noiseVol", v).apply(); vol = v / 100f }
+    fun setVolume(c: Context, v: Int) { p(c).edit().putInt("noiseVol", v).apply(); vol = v / 100f; player?.setVolume(vol, vol) }
 
     @Volatile private var playing: String? = null
     @Volatile private var vol = 0.6f
@@ -36,11 +46,22 @@ object Noise {
         }
         if (want == playing) return
         stop()
-        if (want != null) play(want)
+        if (want == null) return
+        val res = RAW[want]
+        if (res != null) {
+            playing = want
+            try {
+                player = android.media.MediaPlayer.create(c.applicationContext, res)?.apply {
+                    isLooping = true; setVolume(vol, vol); start()
+                }
+            } catch (x: Exception) { player = null }
+        } else play(want)
     }
 
     private fun stop() {
         playing = null
+        try { player?.stop(); player?.release() } catch (x: Exception) {}
+        player = null
         thread?.join(400)
         thread = null
     }
