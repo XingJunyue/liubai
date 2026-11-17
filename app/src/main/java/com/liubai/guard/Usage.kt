@@ -82,4 +82,36 @@ object Usage {
         val live = if (cur == pkg) (System.currentTimeMillis() - curStart).coerceAtLeast(0) else 0L
         return base + live
     }
+
+    /** 一段时间内各应用的前台时长（非增量，周报用）。 */
+    fun range(c: Context, start: Long, end: Long): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        if (!granted(c)) return out
+        val um = c.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val ev = try { um.queryEvents(start, end) } catch (x: Exception) { null } ?: return out
+        val e = UsageEvents.Event()
+        var cp: String? = null
+        var cs = start
+        var first = true
+        fun shut(at: Long) { val p = cp ?: return; if (at > cs) out[p] = (out[p] ?: 0L) + (at - cs); cp = null }
+        while (ev.hasNextEvent()) {
+            ev.getNextEvent(e)
+            val ts = e.timeStamp
+            val pkg = e.packageName
+            when (e.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED -> if (cp != pkg) { shut(ts); cp = pkg; cs = ts }
+                UsageEvents.Event.ACTIVITY_PAUSED, UsageEvents.Event.ACTIVITY_STOPPED ->
+                    if (cp == pkg) shut(ts) else if (cp == null && first) out[pkg] = (out[pkg] ?: 0L) + (ts - start)
+                UsageEvents.Event.SCREEN_NON_INTERACTIVE, UsageEvents.Event.KEYGUARD_SHOWN -> shut(ts)
+            }
+            first = false
+        }
+        shut(minOf(end, System.currentTimeMillis()))
+        return out
+    }
+
+    fun dayStart(daysAgo: Int): Long = Calendar.getInstance().apply {
+        add(Calendar.DAY_OF_YEAR, -daysAgo)
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
 }

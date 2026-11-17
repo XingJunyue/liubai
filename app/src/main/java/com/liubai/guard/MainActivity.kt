@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -60,18 +61,81 @@ class MainActivity : ComponentActivity() {
 fun App() {
     var screen by remember { mutableStateOf("home") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
-    BackHandler(enabled = screen != "home") { screen = if (screen == "setup") "picker" else "home" }
-    Surface(color = C.Cream, modifier = Modifier.fillMaxSize()) {
-        when (screen) {
-            "home" -> Home(onAdd = { screen = "picker" })
-            "picker" -> Picker(onBack = { screen = "home" }, onNext = { picked = it; screen = "setup" })
-            "setup" -> Setup(picked, onBack = { screen = "picker" }, onDone = { screen = "home" })
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+    BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }
+    val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        gesturesEnabled = screen == "home" || screen == "weekly" || screen == "about",
+        drawerContent = {
+            ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
+                Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
+                    Row(Modifier.padding(start = 8.dp, top = 22.dp, bottom = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Sprout(44.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("留白", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+                            Text("给生活留一点空白", fontSize = 12.sp, color = C.Faint)
+                        }
+                    }
+                    DrawerItem("今天", screen == "home") { go("home") }
+                    DrawerItem("每周小结", screen == "weekly") { go("weekly") }
+                    DrawerItem("关于与更新", screen == "about") { go("about") }
+                    Spacer(Modifier.weight(1f))
+                    Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(start = 12.dp, bottom = 18.dp))
+                }
+            }
+        }
+    ) {
+        Surface(color = C.Cream, modifier = Modifier.fillMaxSize()) {
+            val menu = { scope.launch { drawer.open() }; Unit }
+            when (screen) {
+                "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu)
+                "weekly" -> Paged(menu) { WeeklyScreen() }
+                "about" -> Paged(menu) { AboutScreen() }
+                "picker" -> Picker(onBack = { screen = "home" }, onNext = { picked = it; screen = "setup" })
+                "setup" -> Setup(picked, onBack = { screen = "picker" }, onDone = { screen = "home" })
+            }
         }
     }
 }
 
 @Composable
-fun Home(onAdd: () -> Unit) {
+fun MenuButton(onMenu: () -> Unit) {
+    Box(
+        Modifier.size(42.dp).clip(CircleShape).background(C.Card).clickable { onMenu() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(3) { i -> Box(Modifier.width(if (i == 1) 12.dp else 18.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(C.Ink)) }
+        }
+    }
+}
+
+@Composable
+fun Paged(onMenu: () -> Unit, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize().systemBarsPadding()) {
+        Box(Modifier.padding(start = 18.dp, top = 12.dp)) { MenuButton(onMenu) }
+        content()
+    }
+}
+
+@Composable
+fun DrawerItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label, fontSize = 16.sp,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        color = if (selected) C.ClayDeep else C.Ink,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp))
+            .background(if (selected) C.ClayPale else Color.Transparent)
+            .clickable { onClick() }.padding(horizontal = 16.dp, vertical = 14.dp)
+    )
+}
+
+@Composable
+fun Home(onAdd: () -> Unit, onMenu: () -> Unit) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(2000); tick++ } }
@@ -87,7 +151,9 @@ fun Home(onAdd: () -> Unit) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).systemBarsPadding().padding(horizontal = 22.dp)
         ) {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
+            MenuButton(onMenu)
+            Spacer(Modifier.height(14.dp))
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
             Text(Stats.greeting(), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
             Text("今天也温柔地对待自己", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))

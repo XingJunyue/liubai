@@ -1,5 +1,10 @@
 name: build
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -10,6 +15,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with: { gradle-version: '8.7' }
       - run: gradle :app:assembleRelease --no-daemon
-      - run: cp app/build/outputs/apk/release/app-release.apk liubai.apk
+      - run: cp app/build/outputs/apk/release/app-release.apk liubai-1.${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
-        with: { name: liubai-apk, path: liubai.apk }
+        with: { name: liubai-apk, path: liubai-1.${{ github.run_number }}.apk }
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" "liubai-1.${{ github.run_number }}.apk" \
+            --title "留白 1.${{ github.run_number }}" \
+            --notes "$(git log -1 --pretty=%s)" --target "${{ github.sha }}"
