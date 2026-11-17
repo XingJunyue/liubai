@@ -142,8 +142,7 @@ fun AboutScreen() {
         }
     }
     fun get() {
-        val r = rel
-    if (r != null) {
+        val r = rel ?: return
         if (!Updater.canInstall(c)) {
             state = "noperm"
             c.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -211,7 +210,8 @@ fun UpdatePrompt() {
         val r = withContext(Dispatchers.IO) { try { Updater.latest() } catch (x: Exception) { null } }
         if (r != null && r.code > BuildConfig.VERSION_CODE) rel = r
     }
-    val r = rel ?: return
+    val r = rel
+    if (r != null) {
     fun later() { pr.edit().putLong("later", System.currentTimeMillis()).apply(); rel = null }
     fun go() {
         if (!Updater.canInstall(c)) {
