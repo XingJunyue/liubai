@@ -15,10 +15,24 @@ class GuardService : AccessibilityService() {
         @Volatile var instance: GuardService? = null
         private val IGNORE = setOf("com.android.systemui")
         private val SETTINGS = setOf(
-            "com.android.settings", "com.miui.securitycenter", "com.miui.packageinstaller",
-            "com.android.packageinstaller", "com.google.android.packageinstaller", "com.miui.home",
-            "com.miui.permcenter"
+            "com.android.settings", "com.miui.securitycenter", "com.miui.packageinstaller", "com.miui.home", "com.miui.permcenter",
+            "com.android.packageinstaller", "com.google.android.packageinstaller", "com.google.android.permissioncontroller",
+            // 三星
+            "com.samsung.android.packageinstaller", "com.samsung.android.lool", "com.samsung.android.sm.devicesecurity",
+            // 华为 / 荣耀
+            "com.huawei.systemmanager", "com.huawei.android.launcher", "com.hihonor.systemmanager", "com.hihonor.android.launcher",
+            // OPPO / 一加 / realme
+            "com.coloros.safecenter", "com.oplus.safecenter", "com.coloros.securitypermission", "com.oplus.appdetail",
+            "com.oppo.launcher", "com.android.launcher",
+            // vivo / iQOO
+            "com.iqoo.secure", "com.vivo.permissionmanager", "com.bbk.launcher2", "com.vivo.appfilter",
+            // 魅族、联想、摩托罗拉、谷歌桌面
+            "com.meizu.safe", "com.zui.safecenter", "com.motorola.launcher3", "com.google.android.apps.nexuslauncher",
+            "com.sec.android.app.launcher"
         )
+        /** 名单之外的品牌：包名像设置、安装器、手机管家的也一起看。 */
+        private val HINTS = listOf("settings", "packageinstaller", "securitycenter", "safecenter", "systemmanager", "permission", "launcher", "appdetail")
+        fun sensitive(pkg: String) = pkg in SETTINGS || HINTS.any { it in pkg }
         // 只拦真正会关掉守护的按钮；页面本身随便看
         private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "Uninstall", "Force stop", "Clear data", "Disable")
         private val CANCEL = listOf("取消", "Cancel")
@@ -65,7 +79,7 @@ class GuardService : AccessibilityService() {
 
     /** 只有停在桌面 / 设置 / 安装器时才监听「界面内容变化」（用来抓卸载确认框），刷视频时不监听，省电。 */
     private fun watchContent(pkg: String?) {
-        val want = pkg != null && (pkg in SETTINGS || pkg == homePkg) && Store.protectActive(this)
+        val want = pkg != null && (sensitive(pkg) || pkg == homePkg) && Store.protectActive(this)
         if (want == contentOn) return
         contentOn = want
         try {
@@ -118,7 +132,7 @@ class GuardService : AccessibilityService() {
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
         }
-        if (evPkg != null && (evPkg in SETTINGS || evPkg == homePkg)) {
+        if (evPkg != null && (sensitive(evPkg) || evPkg == homePkg)) {
             // 桌面长按图标：记住按的是不是留白（小米桌面弹出的卸载菜单只有图标，没有字）
             if (e.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
                 val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
@@ -284,7 +298,7 @@ class GuardService : AccessibilityService() {
         val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.let { "${it.text ?: ""} ${it.contentDescription ?: ""} ${it.viewIdResourceName ?: ""}" } ?: "" } catch (x: Exception) { "" }))
         val danger = DANGER.any { it in said } || "删除" in said || "uninstall" in said.lowercase() || "delete" in said.lowercase()
         // 桌面：刚长按过留白，再点卸载 / 垃圾桶
-        if (e.packageName?.toString() == homePkg && longSelf && SystemClock.elapsedRealtime() - longAt < 15_000 && danger) { bounce(); return }
+        if ((e.packageName?.toString() == homePkg || "launcher" in (e.packageName?.toString() ?: "")) && longSelf && SystemClock.elapsedRealtime() - longAt < 15_000 && danger) { bounce(); return }
         val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
         val label = getString(R.string.app_name)
         if (!hasText(root, label)) return
