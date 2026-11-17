@@ -54,16 +54,31 @@ private fun hm(m: Int) = if (m >= 60) "${m / 60} 小时 ${m % 60} 分" else "$m 
 fun WeeklyScreen() {
     val c = LocalContext.current
     var w by remember { mutableStateOf<Week?>(null) }
-    LaunchedEffect(Unit) { w = withContext(Dispatchers.IO) { load(c) } }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        w = withContext(Dispatchers.IO) { try { load(c) } catch (t: Throwable) { null } }
+        if (w == null) failed = true
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
         Text("每周小结", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text("最近 7 天，守护中的应用", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(18.dp))
-        if (!Usage.granted(c)) { UsageGuide(); return@Column }
         val x = w
-        if (x == null) { Text("正在整理这一周…", color = C.Faint, fontSize = 14.sp); return@Column }
-        if (x.perApp.isEmpty()) { Text("还没有守护的应用，先在「今天」里添加吧。", color = C.Soft, fontSize = 14.sp); return@Column }
+        when {
+            !Usage.granted(c) -> UsageGuide()
+            failed -> Text("这周的记录暂时读不到，稍后再来看看。", color = C.Soft, fontSize = 14.sp)
+            x == null -> Text("正在整理这一周…", color = C.Faint, fontSize = 14.sp)
+            x.perApp.isEmpty() -> Text("还没有守护的应用，先在「今天」里添加吧。", color = C.Soft, fontSize = 14.sp)
+            else -> WeekBody(x)
+        }
+    }
+}
+
+@Composable
+private fun WeekBody(x: Week) {
+    val c = LocalContext.current
+    Column(Modifier.fillMaxWidth()) {
 
         SoftCard(Modifier.fillMaxWidth()) {
             Text("这周一共用了", fontSize = 13.sp, color = C.Soft)
@@ -110,17 +125,17 @@ fun WeeklyScreen() {
         Spacer(Modifier.height(16.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Text("各应用", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-            val top = maxOf(x.perApp.first().second, 1)
+            val top = maxOf(x.perApp.maxOf { it.second }, 1)
             x.perApp.forEach { (pkg, m) ->
                 val app = remember(pkg) { Apps.info(c, pkg) }
                 Column(Modifier.padding(top = 12.dp)) {
                     Row { Text(app.label, fontSize = 14.sp, color = C.Ink, modifier = Modifier.weight(1f)); Text(hm(m), fontSize = 13.sp, color = C.Soft) }
                     Box(Modifier.padding(top = 6.dp).fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(C.Track)) {
-                        Box(Modifier.fillMaxWidth(m.toFloat() / top).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(C.Clay))
+                        Box(Modifier.fillMaxWidth((m.toFloat() / top).coerceIn(0.02f, 1f)).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(C.Clay))
                     }
                 }
             }
         }
-        Text("柱子变成橘色的那天，是超过了现在的总额度。", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(vertical = 18.dp))
+        Spacer(Modifier.height(30.dp))
     }
 }

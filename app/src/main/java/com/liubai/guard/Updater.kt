@@ -190,7 +190,5 @@ fun AboutScreen() {
                 else -> PrimaryButton("检查更新") { check() }
             }
         }
-        Text("新版本从 GitHub 上的 ${Updater.REPO} 下载，连不上时自动走国内加速镜像。安装时守护设置都会保留。",
-            fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(vertical = 18.dp))
     }
 }
