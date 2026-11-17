@@ -246,15 +246,18 @@ fun UpdatePrompt() {
     LaunchedEffect(resumes) {
         if (resumes == 0 || state == "downloading") return@LaunchedEffect
         val now = System.currentTimeMillis()
-        if (now - pr.getLong("later", 0L) < 3 * 3600_000L) return@LaunchedEffect
-        if (now - pr.getLong("checked", 0L) < 5 * 60_000L && rel == null) return@LaunchedEffect
+        if (rel != null || now - pr.getLong("checked", 0L) < 60_000L) return@LaunchedEffect
         pr.edit().putLong("checked", now).apply()
         val r = withContext(Dispatchers.IO) { try { Updater.latest() } catch (x: Exception) { null } }
-        if (r != null && r.code > BuildConfig.VERSION_CODE && r.code > (rel?.code ?: 0)) { rel = r; state = "ask" }
+        if (r == null || r.code <= BuildConfig.VERSION_CODE) return@LaunchedEffect
+        // 「以后再说」只压住那一个版本 1 小时；一出更新的版本马上再提示
+        val skipped = pr.getInt("skipCode", 0)
+        if (r.code <= skipped && now - pr.getLong("later", 0L) < 3600_000L) return@LaunchedEffect
+        rel = r; state = "ask"
     }
     val r = rel
     if (r != null) {
-    fun later() { pr.edit().putLong("later", System.currentTimeMillis()).apply(); rel = null }
+    fun later() { pr.edit().putLong("later", System.currentTimeMillis()).putInt("skipCode", r.code).apply(); rel = null }
     fun go() {
         if (!Updater.canInstall(c)) {
             state = "noperm"
@@ -273,7 +276,7 @@ fun UpdatePrompt() {
         }
     }
     AlertDialog(
-        onDismissRequest = { if (state != "downloading") later() },
+        onDismissRequest = { if (state != "downloading") rel = null },
         containerColor = C.Card,
         title = { Text("发现新版本 ${r.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink) },
         text = {
