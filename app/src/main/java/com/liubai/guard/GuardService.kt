@@ -189,8 +189,10 @@ class GuardService : AccessibilityService() {
                 val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
                 longSelf = getString(R.string.app_name) in said
                 longAt = SystemClock.elapsedRealtime()
-                if ((evPkg == homePkg || "launcher" in evPkg) && Store.protectActive(this)) armLauncher()
             }
+            // 桌面上任何点按 / 长按 / 拖动后的 20 秒都盯一下：有的桌面长按、点「卸载」都不报事件
+            if ((evPkg == homePkg || "launcher" in evPkg) && e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+                Store.protectActive(this) && !Unlock.open(this)) armLauncher()
             if (Store.protectActive(this) && !Unlock.open(this)) {
                 if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e)
                 else if (e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) laterDialog()
@@ -364,6 +366,7 @@ class GuardService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastGuard < 800) return
         lastGuard = now
+        dismissDialog()
         performGlobalAction(GLOBAL_ACTION_BACK)
         h.postDelayed({
             try {
@@ -394,6 +397,8 @@ class GuardService : AccessibilityService() {
     private val armScan = object : Runnable {
         override fun run() {
             if (SystemClock.elapsedRealtime() > armUntil) return
+            val f = fg
+            if (f != null && f != homePkg && "launcher" !in f && !sensitive(f)) { armUntil = 0L; return }
             if (Store.protectActive(this@GuardService) && !Unlock.open(this@GuardService)) { lastScan = 0L; guardDialog() }
             h.postDelayed(this, 500)
         }
@@ -402,6 +407,24 @@ class GuardService : AccessibilityService() {
         val fresh = SystemClock.elapsedRealtime() > armUntil
         armUntil = SystemClock.elapsedRealtime() + 20_000
         if (fresh) { h.removeCallbacks(armScan); h.postDelayed(armScan, 300) }
+    }
+
+    /** 先直接点确认框里的「取消」，返回键关不掉的桌面弹框也能关掉。 */
+    private fun dismissDialog() {
+        try {
+            val roots = windows.mapNotNull { it.root } + listOfNotNull(rootInActiveWindow)
+            val label = getString(R.string.app_name)
+            for (root in roots) {
+                if (!hasText(root, label)) continue
+                for (w in CANCEL) for (n in root.findAccessibilityNodeInfosByText(w)) {
+                    if ((n.text?.toString() ?: "").trim() != w) continue
+                    var x: android.view.accessibility.AccessibilityNodeInfo? = n
+                    var k = 0
+                    while (x != null && !x.isClickable && k < 4) { x = x.parent; k++ }
+                    if (x?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) == true) return
+                }
+            }
+        } catch (x: Exception) {}
     }
 
     /** 界面内容变化很频繁：合并成 0.4 秒后检查一次，而不是每次都把所有窗口翻一遍。 */
