@@ -79,6 +79,10 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+        <activity android:name=".WidgetPickActivity" android:exported="true" android:label="小部件显示"
+            android:theme="@style/Theme.Liubai" android:excludeFromRecents="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
+        </activity>
         <receiver android:name=".PairReceiver" android:exported="false" />
     </application>
 </manifest>

@@ -74,7 +74,7 @@ fun App() {
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "widget"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -90,6 +90,7 @@ fun App() {
                     DrawerItem("分组额度", screen == "groups") { go("groups") }
                     DrawerItem("睡前锁定", screen == "bed") { go("bed") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
+                    DrawerItem("小部件", screen == "widget") { go("widget") }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -124,6 +125,7 @@ fun App() {
                 "groups" -> Paged(menu) { GroupsScreen() }
                 "bed" -> Paged(menu) { BedScreen() }
                 "about" -> Paged(menu) { AboutScreen() }
+                "widget" -> Paged(menu) { Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) { WidgetScreen() } }
                 "guide" -> Paged(menu) { GuideScreen() }
                 "intro" -> Column(Modifier.fillMaxSize().systemBarsPadding().padding(top = 16.dp)) {
                     GuideScreen { Unlock.setGuided(ctx); screen = "home" }

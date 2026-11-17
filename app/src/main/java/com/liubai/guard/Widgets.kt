@@ -13,6 +13,20 @@ import android.graphics.RectF
 import android.view.View
 import android.widget.RemoteViews
 
+/** 小部件里展示哪几个应用。空 = 自动（全部）。按勾选顺序排。 */
+object WidgetSel {
+    private fun p(c: Context) = c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE)
+    fun get(c: Context): List<String> = p(c).getString("widgetPkgs", "")!!.split(",").filter { it.isNotBlank() }
+    fun set(c: Context, l: List<String>) { p(c).edit().putString("widgetPkgs", l.joinToString(",")).apply() }
+    fun pick(c: Context, all: List<Row>): List<Row> {
+        val sel = get(c)
+        if (sel.isEmpty()) return all
+        val m = all.associateBy { it.pkg }
+        val r = sel.mapNotNull { m[it] }
+        return if (r.isEmpty()) all else r
+    }
+}
+
 object Widgets {
     private val iconCache = HashMap<String, Bitmap>()
     private fun ring(frac: Float): Bitmap {
@@ -63,7 +77,7 @@ object Widgets {
             try {
                 val s = (iconR * 2).toInt()
                 val ib = iconCache.getOrPut(row.pkg) {
-                val d = c.packageManager.getApplicationIcon(row.pkg)
+                val d = c.packageManager.getApplicationIcon(Virt.real(row.pkg))
                 val ib = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
                 val ic = Canvas(ib)
                 val clip = android.graphics.Path().apply { addCircle(s / 2f, s / 2f, s / 2f, android.graphics.Path.Direction.CW) }
@@ -85,9 +99,10 @@ object Widgets {
 
     fun updateAll(c: Context, force: Boolean = false) {
         val m = AppWidgetManager.getInstance(c) ?: return
-        val rows = Stats.rows(c)
+        val rows = WidgetSel.pick(c, Stats.rows(c))
+        val custom = WidgetSel.get(c).isNotEmpty()
         // 内容没变（分钟数一样）就不重画、不推给桌面，省电省发热；每 30 分钟兜底强刷一次
-        val sig = rows.joinToString("|") { "${it.pkg}:${it.usedMin}:${it.limit}:${it.done}" }
+        val sig = (if (custom) "c" else "a") + rows.joinToString("|") { "${it.pkg}:${it.usedMin}:${it.limit}:${it.done}" }
         val now = System.currentTimeMillis()
         if (!force && sig == lastSig && now - lastSigAt < 30 * 60_000L) return
         lastSig = sig; lastSigAt = now
@@ -121,14 +136,14 @@ object Widgets {
                 intArrayOf(R.id.r1, R.id.i1, R.id.n1, R.id.u1, R.id.p1, R.id.q1),
                 intArrayOf(R.id.r2, R.id.i2, R.id.n2, R.id.u2, R.id.p2, R.id.q2)
             )
-            val shown = rows.sortedByDescending { it.frac }.take(3)
+            val shown = (if (custom) rows else rows.sortedByDescending { it.frac }).take(3)
             for ((i, s) in slots.withIndex()) {
                 val row = shown.getOrNull(i)
                 if (row == null) { v.setViewVisibility(s[0], View.GONE); continue }
                 v.setViewVisibility(s[0], View.VISIBLE)
                 val info = Apps.info(c, row.pkg)
                 try {
-                    val d = c.packageManager.getApplicationIcon(row.pkg)
+                    val d = c.packageManager.getApplicationIcon(Virt.real(row.pkg))
                     val b = Bitmap.createBitmap(72, 72, Bitmap.Config.ARGB_8888)
                     d.setBounds(0, 0, 72, 72); d.draw(Canvas(b))
                     v.setImageViewBitmap(s[1], b)
