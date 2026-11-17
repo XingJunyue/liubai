@@ -65,7 +65,11 @@ object Store {
     /** 防反悔内置、不外显：只要今天还有应用在守护，就挡住关闭守护和卸载。想彻底停用，移除所有应用，明天 0:00 起自动解除。 */
     fun protectActive(c: Context): Boolean = active(c).isNotEmpty()
 
-    fun usedMs(c: Context, pkg: String): Long { roll(c); return p(c).getLong("u_${today()}_$pkg", 0L) }
+    fun usedMs(c: Context, pkg: String): Long {
+        roll(c)
+        val own = p(c).getLong("u_${today()}_$pkg", 0L)
+        return if (Usage.granted(c)) maxOf(own, Usage.usedMs(c, pkg)) else own
+    }
     fun addUsage(c: Context, pkg: String, ms: Long) {
         roll(c)
         val k = "u_${today()}_$pkg"

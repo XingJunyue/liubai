@@ -78,6 +78,7 @@ fun Home(onAdd: () -> Unit) {
     var editing by remember { mutableStateOf<String?>(null) }
     val rows = remember(tick, editing) { Stats.rows(c) }
     val on = remember(tick) { serviceOn(c) }
+    val usageOk = remember(tick) { Usage.granted(c) }
     val (used, total) = Stats.totals(rows)
     val left = (total - used).coerceAtLeast(0)
     val date = remember { SimpleDateFormat("M月d日 · EEEE", Locale.CHINA).format(Date()) }
@@ -91,6 +92,10 @@ fun Home(onAdd: () -> Unit) {
             Text(Stats.greeting(), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
             Text("今天也温柔地对待自己", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
 
+            if (!usageOk) {
+                Spacer(Modifier.height(18.dp))
+                UsageGuide()
+            }
             if (!on) {
                 Spacer(Modifier.height(18.dp))
                 SetupGuide()
@@ -185,6 +190,26 @@ fun Home(onAdd: () -> Unit) {
 @Composable
 fun FlowRowLite(content: @Composable RowScope.() -> Unit) {
     Row(Modifier.fillMaxWidth(), content = content)
+}
+
+@Composable
+fun UsageGuide() {
+    val c = LocalContext.current
+    SoftCard(Modifier.fillMaxWidth()) {
+        Text("先让留白看见你的使用时长", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(
+            "打开「使用情况访问权限」，留白就能读到今天每个应用真实用了多久，和系统「健康使用手机」同一份数据，装之前用掉的也会算上。",
+            fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
+        )
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("去开启") {
+            try {
+                c.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (x: Exception) {
+                c.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
 }
 
 @Composable

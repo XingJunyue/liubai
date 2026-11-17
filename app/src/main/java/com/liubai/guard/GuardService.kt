@@ -86,6 +86,9 @@ class GuardService : AccessibilityService() {
         if (t != day) { day = t; flush(); Widgets.updateAll(this) }
         if (now - lastWidget > 30_000) { lastWidget = now; flush(); Widgets.updateAll(this) }
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); return }
+        val sys = Usage.update(this)
+        if (sys != null && sys != packageName && Store.active(this)[sys] != null && blocked(sys)) { block(sys); return }
+        if (Usage.granted(this)) { pendMs = 0; pendPkg = null; return } // 系统用量为准，避免重复计时
         val p = fg ?: return
         if (p == packageName || Store.active(this)[p] == null) return
         if (dt in 1..5000) {
