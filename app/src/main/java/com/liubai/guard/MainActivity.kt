@@ -100,7 +100,10 @@ fun App() {
                             colors = SwitchDefaults.colors(checkedTrackColor = C.Clay, checkedThumbColor = androidx.compose.ui.graphics.Color.White, uncheckedTrackColor = C.Track, uncheckedBorderColor = C.Track))
                     }
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.weight(1f))
+                        Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint)
+                        Text("检查更新", fontSize = 12.sp, color = C.ClayDeep,
+                            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { go("about") }.padding(horizontal = 8.dp, vertical = 6.dp))
+                        Spacer(Modifier.weight(1f))
                         Text(
                             "使用说明", fontSize = 13.sp,
                             color = if (screen == "guide") C.ClayDeep else C.Soft,

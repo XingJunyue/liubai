@@ -171,6 +171,8 @@ fun AboutScreen() {
             state = when { r == null -> "error"; r.code > BuildConfig.VERSION_CODE -> "found"; else -> "latest" }
         }
     }
+    // 一打开就查，不用再点一次
+    LaunchedEffect(Unit) { check() }
     fun get() {
         val r = rel ?: return
         if (!Updater.canInstall(c)) {
