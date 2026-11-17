@@ -19,6 +19,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -76,6 +77,28 @@ object Focus {
         else -> (endAt(c) - System.currentTimeMillis()).coerceAtLeast(0)
     }
     fun totalMs(c: Context): Long = len(c, if (phase(c) == IDLE) next(c) else phase(c)) * 60_000L
+
+    fun scholar(c: Context) = p(c).getBoolean("scholar", false)
+    fun setScholar(c: Context, v: Boolean) = p(c).edit().putBoolean("scholar", v).apply()
+    fun whitelist(c: Context): Set<String> = p(c).getStringSet("wl", emptySet())!!.toSet()
+    fun setWhitelist(c: Context, s: Set<String>) = p(c).edit().putStringSet("wl", s).apply()
+    /** 学霸模式生效中：专注阶段（含暂停）只放行白名单。 */
+    fun scholarLocking(c: Context) = phase(c) == WORK && scholar(c)
+
+    /** 永远放行的系统必需品：桌面、电话、短信、输入法、权限弹窗等。 */
+    fun essentials(c: Context): Set<String> {
+        val s = mutableSetOf(c.packageName, "android", "com.android.systemui", "com.android.phone", "com.android.incallui",
+            "com.android.server.telecom", "com.android.permissioncontroller", "com.google.android.permissioncontroller",
+            "com.android.packageinstaller", "com.google.android.packageinstaller", "com.android.emergency", "com.android.contacts", "com.android.mms")
+        try {
+            c.packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName?.let { s += it }
+            c.getSystemService(android.telecom.TelecomManager::class.java)?.defaultDialerPackage?.let { s += it }
+            android.provider.Telephony.Sms.getDefaultSmsPackage(c)?.let { s += it }
+            android.provider.Settings.Secure.getString(c.contentResolver, "enabled_input_methods")
+                ?.split(':')?.forEach { s += it.substringBefore('/') }
+        } catch (x: Exception) {}
+        return s
+    }
 
     /** 专注进行中，且选了「专注时锁住守护中的应用」。 */
     fun locking(c: Context) = phase(c) == WORK && lockApps(c)
@@ -144,7 +167,7 @@ private fun mmss(ms: Long): String {
 }
 
 @Composable
-fun FocusScreen() {
+fun FocusScreen(onBack: () -> Unit = {}) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { Focus.tick(c); tick++; delay(250) } }
@@ -159,6 +182,11 @@ fun FocusScreen() {
     val accent by animateColorAsState(if (isBreak) C.Sage else C.Clay, tween(600), label = "a")
     val frac by animateFloatAsState(if (total <= 0) 0f else 1f - left.toFloat() / total, tween(300), label = "f")
     var showSet by remember { mutableStateOf(false) }
+    var showWl by remember { mutableStateOf(false) }
+    var scholar by remember { mutableStateOf(Focus.scholar(c)) }
+    // 学霸模式下，专注一旦开始就不能中途暂停、重置或跳过
+    val strict = scholar && phase == Focus.WORK
+    if (showWl) { WhitelistScreen(onBack = { showWl = false }); return }
 
     fun startNow(ph: Int) {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -172,10 +200,15 @@ fun FocusScreen() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Column(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.height(8.dp))
-            Text("专注", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+            Text("‹ 返回", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
+                .clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
+            Text("专注", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
             Text(
-                if (Focus.lockApps(c)) "专注时，守护中的应用都会暂停开放" else "一次只做一件事",
+                when {
+                    scholar -> "学霸模式：专注时只开放白名单里的应用"
+                    Focus.lockApps(c) -> "专注时，守护中的应用都会暂停开放"
+                    else -> "一次只做一件事"
+                },
                 fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -245,14 +278,14 @@ fun FocusScreen() {
         // 主按钮 + 两个轻按钮
         Row(Modifier.padding(top = 30.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "重置", fontSize = 14.sp, color = if (phase != Focus.IDLE) C.Soft else C.Faint,
+                "重置", fontSize = 14.sp, color = if (phase != Focus.IDLE && !strict) C.Soft else C.Faint,
                 modifier = Modifier.width(72.dp).clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = phase != Focus.IDLE) { Focus.stop(c); tick++ }.padding(vertical = 12.dp),
+                    .clickable(enabled = phase != Focus.IDLE && !strict) { Focus.stop(c); tick++ }.padding(vertical = 12.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
             Box(
                 Modifier.padding(horizontal = 20.dp).size(76.dp).clip(CircleShape).background(accent)
-                    .clickable {
+                    .clickable(enabled = !(strict && running)) {
                         when {
                             phase == Focus.IDLE -> startNow(Focus.next(c))
                             running -> { Focus.pause(c); tick++ }
@@ -261,7 +294,15 @@ fun FocusScreen() {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                if (running) {
+                if (strict && running) {
+                    Canvas(Modifier.size(22.dp)) { // 小锁
+                        val w = size.width; val hh = size.height
+                        drawRoundRect(Color.White, Offset(w * 0.12f, hh * 0.45f), Size(w * 0.76f, hh * 0.55f),
+                            androidx.compose.ui.geometry.CornerRadius(w * 0.12f))
+                        drawArc(Color.White, 180f, 180f, false, Offset(w * 0.27f, hh * 0.08f), Size(w * 0.46f, hh * 0.6f),
+                            style = Stroke(w * 0.11f))
+                    }
+                } else if (running) {
                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         repeat(2) { Box(Modifier.width(5.dp).height(22.dp).clip(RoundedCornerShape(3.dp)).background(Color.White)) }
                     }
@@ -275,17 +316,47 @@ fun FocusScreen() {
                 }
             }
             Text(
-                "跳过", fontSize = 14.sp, color = if (phase != Focus.IDLE) C.Soft else C.Faint,
+                "跳过", fontSize = 14.sp, color = if (phase != Focus.IDLE && !strict) C.Soft else C.Faint,
                 modifier = Modifier.width(72.dp).clip(RoundedCornerShape(12.dp))
-                    .clickable(enabled = phase != Focus.IDLE) { Focus.skip(c); tick++ }.padding(vertical = 12.dp),
+                    .clickable(enabled = phase != Focus.IDLE && !strict) { Focus.skip(c); tick++ }.padding(vertical = 12.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
+        }
+
+        if (strict) Text("学霸模式下，这个番茄要做完才能停", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 12.dp))
+
+        // 学霸模式卡片
+        SoftCard(Modifier.fillMaxWidth().padding(top = 26.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("学霸模式", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                    Text("专注时，除了白名单都打不开", fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
+                }
+                androidx.compose.material3.Switch(
+                    checked = scholar, enabled = !strict,
+                    onCheckedChange = { scholar = it; Focus.setScholar(c, it) },
+                    colors = androidx.compose.material3.SwitchDefaults.colors(
+                        checkedThumbColor = Color.White, checkedTrackColor = C.Clay,
+                        uncheckedThumbColor = Color.White, uncheckedTrackColor = C.Track, uncheckedBorderColor = C.Track)
+                )
+            }
+            val wl = remember(showWl, tick / 20) { Focus.whitelist(c) }
+            Row(
+                Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.Sand)
+                    .clickable(enabled = !strict) { showWl = true }.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("白名单", fontSize = 14.sp, color = C.Ink, modifier = Modifier.weight(1f))
+                Text(if (wl.isEmpty()) "还没选" else "${wl.size} 个应用", fontSize = 13.sp, color = C.Soft)
+                Text("  ›", fontSize = 16.sp, color = C.Faint)
+            }
+            if (strict) Text("专注中不能改，休息时再调整", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
         }
 
         // 白噪音：一行轻量文字标签
         var nk by remember { mutableStateOf(Noise.kind(c)) }
         Row(
-            Modifier.padding(top = 26.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.Card)
+            Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.Card)
                 .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -368,5 +439,84 @@ fun FocusPill(onOpen: () -> Unit) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(if (phase == Focus.IDLE) C.Faint else dot))
         Spacer(Modifier.width(8.dp))
         Text(text, fontSize = 13.sp, color = C.Ink)
+    }
+}
+
+
+/** 学霸模式白名单。电话、短信、输入法、桌面默认放行，不用选。 */
+@Composable
+fun WhitelistScreen(onBack: () -> Unit) {
+    val c = LocalContext.current
+    var apps by remember { mutableStateOf<List<AppInfo>?>(null) }
+    LaunchedEffect(Unit) { apps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Apps.launchable(c) } }
+    val sel = remember { mutableStateListOf<String>().apply { addAll(Focus.whitelist(c)) } }
+    val ess = remember { Focus.essentials(c) }
+    androidx.activity.compose.BackHandler { Focus.setWhitelist(c, sel.toSet()); onBack() }
+    Column(Modifier.fillMaxSize().padding(horizontal = 22.dp)) {
+        Text("‹ 完成", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
+            .clip(RoundedCornerShape(10.dp)).clickable { Focus.setWhitelist(c, sel.toSet()); onBack() }.padding(vertical = 4.dp))
+        Text("白名单", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+        Text("学霸模式下只有这些能打开。电话、短信、输入法已默认放行。", fontSize = 14.sp, color = C.Soft,
+            lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
+        val list = apps
+        if (list == null) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.CircularProgressIndicator(color = C.Clay)
+            }
+        } else {
+            val shown = list.filter { it.pkg !in ess }.sortedBy { if (it.pkg in sel) 0 else 1 }
+            androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f).padding(top = 10.dp)) {
+                items(shown.size, key = { shown[it].pkg }) { i ->
+                    val a = shown[i]
+                    val on = a.pkg in sel
+                    Row(
+                        Modifier.fillMaxWidth().clickable { if (on) sel.remove(a.pkg) else sel.add(a.pkg) }
+                            .padding(vertical = 12.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppIcon(a)
+                        Spacer(Modifier.width(14.dp))
+                        Text(a.label, fontSize = 16.sp, color = C.Ink, modifier = Modifier.weight(1f))
+                        Box(
+                            Modifier.size(24.dp).clip(CircleShape).then(
+                                if (on) Modifier.background(C.Sage)
+                                else Modifier.border(2.dp, Color(0xFFDCCFC2), CircleShape)
+                            ),
+                            contentAlignment = Alignment.Center
+                        ) { if (on) Text("✓", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = C.Track)
+                }
+            }
+        }
+    }
+}
+
+/** 首页右上角的专注入口：空闲时是一个淡淡的圆，专注中外圈走进度。 */
+@Composable
+fun FocusButton(onOpen: () -> Unit) {
+    val c = LocalContext.current
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(1000); tick++ } }
+    val phase = remember(tick) { Focus.phase(c) }
+    val frac = remember(tick) { if (phase == Focus.IDLE) 0f else 1f - Focus.leftMs(c).toFloat() / Focus.totalMs(c).coerceAtLeast(1) }
+    val col = if (phase == Focus.SHORT || phase == Focus.LONG) C.Sage else C.Clay
+    Row(
+        Modifier.clip(RoundedCornerShape(21.dp)).background(C.Card).clickable { onOpen() }
+            .padding(start = 10.dp, end = 14.dp).height(42.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            val sw = 2.dp.toPx()
+            val tl = Offset(sw / 2, sw / 2); val sz = Size(size.width - sw, size.height - sw)
+            drawArc(if (phase == Focus.IDLE) C.Ink else C.Track, 0f, 360f, false, tl, sz, style = Stroke(sw))
+            if (phase != Focus.IDLE) drawArc(col, -90f, 360f * frac, false, tl, sz, style = Stroke(sw, cap = StrokeCap.Round))
+            else drawLine(C.Ink, center, Offset(center.x, size.height * 0.28f), sw, StrokeCap.Round)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (phase == Focus.IDLE) "专注" else mmss(Focus.leftMs(c)),
+            fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.Medium
+        )
     }
 }

@@ -91,6 +91,14 @@ class GuardService : AccessibilityService() {
         }
     }
 
+    private var essCache: Set<String>? = null
+    private var essAt = 0L
+    private fun scholarEss(): Set<String> {
+        val now = SystemClock.elapsedRealtime()
+        if (essCache == null || now - essAt > 60_000) { essCache = Focus.essentials(this); essAt = now }
+        return essCache!!
+    }
+
     private fun guarded(pkg: String): Boolean =
         Store.active(this)[pkg] != null || Store.groupsActive(this).any { pkg in it.pkgs }
 
@@ -99,6 +107,7 @@ class GuardService : AccessibilityService() {
     /** 现在该不该挡住它；返回原因，null 表示放行。 */
     private fun reason(pkg: String): String? {
         if (pkg == packageName) return null
+        if (Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
         if (lim == null && groups.isEmpty()) return null
@@ -171,6 +180,7 @@ class GuardService : AccessibilityService() {
         val sys = Usage.update(this)
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: sys
+        if (cur != null && Focus.scholarLocking(this) && reason(cur) == "scholar") { block(cur, "scholar"); return }
         if (cur != null && cur != packageName && guarded(cur)) {
             reason(cur)?.let { block(cur, it); return }
             watch(cur)

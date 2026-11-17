@@ -71,7 +71,7 @@ fun App() {
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "focus"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -86,7 +86,6 @@ fun App() {
                     DrawerItem("今天", screen == "home") { go("home") }
                     DrawerItem("分组额度", screen == "groups") { go("groups") }
                     DrawerItem("睡前锁定", screen == "bed") { go("bed") }
-                    DrawerItem("专注", screen == "focus") { go("focus") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -106,7 +105,7 @@ fun App() {
             val menu = { scope.launch { drawer.open() }; Unit }
             when (screen) {
                 "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu, onFocus = { screen = "focus" })
-                "focus" -> Paged(menu) { FocusScreen() }
+                "focus" -> Box(Modifier.fillMaxSize().systemBarsPadding()) { FocusScreen(onBack = { screen = "home" }) }
                 "weekly" -> Paged(menu) { WeeklyScreen() }
                 "groups" -> Paged(menu) { GroupsScreen() }
                 "bed" -> Paged(menu) { BedScreen() }
@@ -172,14 +171,17 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).systemBarsPadding().padding(horizontal = 22.dp)
         ) {
             Spacer(Modifier.height(12.dp))
-            MenuButton(onMenu)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MenuButton(onMenu)
+                Spacer(Modifier.weight(1f))
+                FocusButton(onFocus)
+            }
             Spacer(Modifier.height(14.dp))
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
             Text(Stats.greeting(), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
             Text("今天也温柔地对待自己", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
             val bed = remember(tick) { Store.bedActive(c) }
             if (bed.on) Chip("睡前锁定 ${Rules.clock(bed.from)}–${Rules.clock(bed.to)}")
-            FocusPill(onFocus)
 
             if (!usageOk) {
                 Spacer(Modifier.height(18.dp))
