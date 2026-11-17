@@ -45,34 +45,57 @@ object Updater {
         return con
     }
 
+    /** 各个来源都问一遍，取最大的版本号；镜像会缓存跳转，所以不能拿到第一个就停。 */
     fun latest(): Release? {
         lastError = ""
-        // 1) GitHub API（有更新说明）
+        val bust = "?t=" + System.currentTimeMillis()
+        var best: Release? = null
+        var bestMirror = ""
+        fun take(r: Release, m: String) { if (best == null || r.code > best!!.code) { best = r; bestMirror = m } }
+        // 1) GitHub API：列出最近的发布（有更新说明）
         try {
-            val con = open("https://api.github.com/repos/$REPO/releases/latest")
+            val con = open("https://api.github.com/repos/$REPO/releases?per_page=5")
             con.setRequestProperty("Accept", "application/vnd.github+json")
+            con.setRequestProperty("Cache-Control", "no-cache")
             val rc = con.responseCode
-            if (rc == 404) { lastError = "private"; return null }
+            if (rc == 404) lastError = "private"
             if (rc == 200) {
-                val j = JSONObject(con.inputStream.bufferedReader().readText())
-                val code = j.optString("tag_name").substringAfterLast('-').toIntOrNull()
-                if (code != null) { mirror = ""; return Release(code, j.optString("name"), j.optString("body"), apk(code)) }
+                val arr = org.json.JSONArray(con.inputStream.bufferedReader().readText())
+                for (k in 0 until arr.length()) {
+                    val j = arr.getJSONObject(k)
+                    if (j.optBoolean("draft") || j.optBoolean("prerelease")) continue
+                    val code = j.optString("tag_name").substringAfterLast('-').toIntOrNull() ?: continue
+                    take(Release(code, j.optString("name"), j.optString("body"), apk(code)), "")
+                }
             }
         } catch (x: Exception) {}
-        // 2) 通过镜像读 releases/latest 的跳转，拿到最新 tag
+        // 2) 每个镜像读 releases/latest 的跳转
         for (m in MIRRORS) {
             try {
-                val con = open(m + "https://github.com/$REPO/releases/latest")
+                val con = open(m + "https://github.com/$REPO/releases/latest" + bust, 6_000)
                 con.instanceFollowRedirects = false
+                con.setRequestProperty("Cache-Control", "no-cache")
                 val rc = con.responseCode
                 val loc = con.getHeaderField("Location") ?: ""
                 val code = Regex("build-(\\d+)").find(loc)?.groupValues?.get(1)?.toIntOrNull()
-                if (rc in 300..399 && code != null) { mirror = m; return Release(code, "留白 1.$code", "", apk(code)) }
-                if (rc == 404) lastError = "private"
+                if (rc in 300..399 && code != null) take(Release(code, "留白 1.$code", "", apk(code)), m)
+                if (rc == 404 && best == null) lastError = "private"
             } catch (x: Exception) {}
         }
-        if (lastError.isEmpty()) lastError = "network"
-        return null
+        // 3) 发布的 atom 订阅，再兜底一次
+        for (m in MIRRORS.take(2)) {
+            try {
+                val con = open(m + "https://github.com/$REPO/releases.atom" + bust, 6_000)
+                if (con.responseCode == 200) {
+                    val txt = con.inputStream.bufferedReader().readText()
+                    Regex("build-(\\d+)").findAll(txt).mapNotNull { it.groupValues[1].toIntOrNull() }.maxOrNull()
+                        ?.let { take(Release(it, "留白 1.$it", "", apk(it)), m) }
+                }
+            } catch (x: Exception) {}
+        }
+        if (best == null && lastError.isEmpty()) lastError = "network"
+        if (best != null) mirror = bestMirror
+        return best
     }
 
     private fun apk(code: Int) = "https://github.com/$REPO/releases/download/build-$code/liubai-1.$code.apk"
@@ -80,8 +103,15 @@ object Updater {
     fun download(c: Context, url: String, progress: (Float) -> Unit): File {
         val order = listOf(mirror) + MIRRORS.filter { it != mirror }
         var last: Exception? = null
+        val want = Regex("build-(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
         for (m in order) {
-            try { return fetch(c, m + url, progress) } catch (x: Exception) { last = x }
+            try {
+                val f = fetch(c, m + url, progress)
+                // 镜像可能给了旧缓存或残缺文件：核对安装包里的版本号，不对就换下一个
+                val got = try { c.packageManager.getPackageArchiveInfo(f.path, 0)?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else @Suppress("DEPRECATION") it.versionCode } } catch (x: Exception) { null }
+                if (got == null || (want != null && got < want)) { last = Exception("bad apk $got"); continue }
+                return f
+            } catch (x: Exception) { last = x }
         }
         throw last ?: Exception("download failed")
     }
@@ -205,10 +235,22 @@ fun UpdatePrompt() {
     var state by remember { mutableStateOf("ask") } // ask downloading error noperm
     var prog by remember { mutableStateOf(0f) }
 
-    LaunchedEffect(Unit) {
-        if (System.currentTimeMillis() - pr.getLong("later", 0L) < 3 * 3600_000L) return@LaunchedEffect
+    // 每次回到留白都查（5 分钟内不重复查），不是只在进程启动时查一次
+    var resumes by remember { mutableStateOf(0) }
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) resumes++ }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(resumes) {
+        if (resumes == 0 || state == "downloading") return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        if (now - pr.getLong("later", 0L) < 3 * 3600_000L) return@LaunchedEffect
+        if (now - pr.getLong("checked", 0L) < 5 * 60_000L && rel == null) return@LaunchedEffect
+        pr.edit().putLong("checked", now).apply()
         val r = withContext(Dispatchers.IO) { try { Updater.latest() } catch (x: Exception) { null } }
-        if (r != null && r.code > BuildConfig.VERSION_CODE) rel = r
+        if (r != null && r.code > BuildConfig.VERSION_CODE && r.code > (rel?.code ?: 0)) { rel = r; state = "ask" }
     }
     val r = rel
     if (r != null) {
@@ -221,7 +263,12 @@ fun UpdatePrompt() {
         }
         state = "downloading"; prog = 0f
         scope.launch {
-            val f = withContext(Dispatchers.IO) { try { Updater.download(c, r.url) { p -> prog = p } } catch (x: Exception) { null } }
+            val f = withContext(Dispatchers.IO) {
+                // 点下去那一刻再确认一次最新版，直接下最新的那个
+                val fresh = try { Updater.latest() } catch (x: Exception) { null }
+                val target = if (fresh != null && fresh.code > r.code) fresh else r
+                try { Updater.download(c, target.url) { p -> prog = p } } catch (x: Exception) { null }
+            }
             if (f == null) state = "error" else { Updater.install(c, f); rel = null }
         }
     }
