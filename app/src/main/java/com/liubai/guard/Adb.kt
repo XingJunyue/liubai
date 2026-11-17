@@ -136,6 +136,42 @@ object WAdb {
         try { nm.notify(NID, b.build()) } catch (x: SecurityException) {}
     }
 
+    /** 连上之后执行授权；有的系统要在开发者选项里多开一个「USB 调试（安全设置）」才允许。 */
+    private fun grant(app: Context, m: LiubaiAdb): String {
+        val s = m.openStream("shell:pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS")
+        val out = StringBuilder()
+        try {
+            val ins = s.openInputStream(); val buf = ByteArray(1024)
+            while (true) { val n = ins.read(buf); if (n <= 0) break; out.append(String(buf, 0, n)) }
+        } catch (x: Exception) {}
+        try { s.close() } catch (x: Exception) {}
+        try { m.disconnect() } catch (x: Exception) {}
+        if (Keep.canHeal(app)) { Keep.heal(app); return "ok" }
+        val o = out.toString()
+        if ("GRANT_RUNTIME_PERMISSIONS" in o || "SecurityException" in o)
+            throw Exception("已经连上了，只差最后一步：在开发者选项里打开「USB 调试（安全设置）」（在「USB 调试」下面几行），再回来点「再试一次」。")
+        throw Exception(o.lineSequence().firstOrNull { it.isNotBlank() }?.take(120) ?: "授权没成功")
+    }
+
+    /** 已经配对过的话，不用再输配对码，直接连上授权。 */
+    fun retry(c: Context) {
+        val app = c.applicationContext
+        if (status == "working") return
+        status = "working"
+        thread {
+            val msg = try {
+                val m = LiubaiAdb.get(app)
+                if (!m.isConnected && !m.connectTls(app, 4_000)) throw Exception("nopair")
+                grant(app, m)
+            } catch (x: Throwable) { x.message ?: "nopair" }
+            when (msg) {
+                "ok" -> { status = "done"; notify(app, "好了", "以后留白被系统关掉，会自己重新打开。无线调试可以关掉了。", false) }
+                "nopair" -> { status = ""; android.os.Handler(Looper.getMainLooper()).post { begin(app) } }
+                else -> status = "error:$msg"
+            }
+        }
+    }
+
     /** 第二步：拿到配对码 → 配对 → 连接 → 授权。在后台线程跑。 */
     private var lastScan = 0L
     private val reCode = Regex("^\\s*(\\d{6})\\s*$")
@@ -181,15 +217,7 @@ object WAdb {
                 val host = pairHost?.hostAddress ?: "127.0.0.1"
                 if (!m.pair(host, pairPort, code.trim())) throw Exception("配对码不对，重新点一次配对再试")
                 if (!m.isConnected && !m.connectTls(app, 15_000)) throw Exception("配对成功，但没连上：确认「无线调试」还开着")
-                val s = m.openStream("shell:pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS")
-                val out = StringBuilder()
-                try {
-                    val ins = s.openInputStream(); val buf = ByteArray(1024)
-                    while (true) { val n = ins.read(buf); if (n <= 0) break; out.append(String(buf, 0, n)) }
-                } catch (x: Exception) {}
-                try { s.close() } catch (x: Exception) {}
-                try { m.disconnect() } catch (x: Exception) {}
-                if (Keep.canHeal(app)) { Keep.heal(app); "ok" } else throw Exception(out.toString().ifBlank { "授权没成功" })
+                grant(app, m)
             } catch (x: Throwable) { x.message ?: x.javaClass.simpleName }
             try { mdns?.stop() } catch (x: Exception) {}
             pairPort = -1
