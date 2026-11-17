@@ -305,7 +305,7 @@ fun UsageGuide() {
     SoftCard(Modifier.fillMaxWidth()) {
         Text("先让留白看见你的使用时长", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "打开「使用情况访问权限」，留白就能读到今天每个应用真实用了多久，和系统「健康使用手机」同一份数据，装之前用掉的也会算上。",
+            "打开「使用情况访问权限」，留白就能读到今天每个应用真实用了多久，和系统自带的屏幕使用时间是同一份数据，装之前用掉的也会算上。",
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Spacer(Modifier.height(12.dp))
