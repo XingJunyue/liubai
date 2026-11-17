@@ -66,10 +66,19 @@ object Focus {
 
     private fun dayFix(c: Context) {
         val t = Store.today()
-        if (p(c).getString("day", "") != t) p(c).edit().putString("day", t).putInt("cnt", 0).putInt("min", 0).apply()
+        if (p(c).getString("day", "") != t) p(c).edit().putString("day", t).putInt("cnt", 0).putLong("ms", 0L).apply()
     }
     fun todayCount(c: Context): Int { dayFix(c); return p(c).getInt("cnt", 0) }
-    fun todayMin(c: Context): Int { dayFix(c); return p(c).getInt("min", 0) }
+    /** 今天专注的分钟数：已记下的 + 正在进行这一段已走过的。 */
+    fun todayMin(c: Context): Int {
+        dayFix(c)
+        val live = if (phase(c) == WORK) (totalMs(c) - leftMs(c)).coerceAtLeast(0) else 0L
+        return ((p(c).getLong("ms", 0L) + live) / 60_000L).toInt()
+    }
+    private fun addFocused(c: Context, ms: Long) {
+        if (ms <= 0) return
+        dayFix(c); p(c).edit().putLong("ms", p(c).getLong("ms", 0L) + ms).apply()
+    }
 
     fun leftMs(c: Context): Long = when {
         phase(c) == IDLE -> len(c, next(c)) * 60_000L
@@ -111,7 +120,9 @@ object Focus {
         val l = pausedLeft(c); if (l < 0) return
         p(c).edit().putLong("end", System.currentTimeMillis() + l).putLong("paused", -1L).apply()
     }
-    fun stop(c: Context) { p(c).edit().putInt("phase", IDLE).putLong("paused", -1L).apply() }
+    fun stop(c: Context) {
+        if (phase(c) == WORK) addFocused(c, totalMs(c) - leftMs(c))
+        p(c).edit().putInt("phase", IDLE).putLong("paused", -1L).apply() }
     fun skip(c: Context) { finish(c, counted = false) }
     fun choose(c: Context, ph: Int) { if (phase(c) == IDLE) p(c).edit().putInt("next", ph).apply() }
 
@@ -121,10 +132,8 @@ object Focus {
         var nx = WORK
         if (ph == WORK) {
             var r = round(c)
-            if (counted) {
-                dayFix(c)
-                e.putInt("cnt", p(c).getInt("cnt", 0) + 1).putInt("min", p(c).getInt("min", 0) + len(c, WORK))
-            }
+            addFocused(c, if (counted) totalMs(c) else totalMs(c) - leftMs(c))
+            if (counted) { dayFix(c); e.putInt("cnt", p(c).getInt("cnt", 0) + 1) }
             r += 1
             nx = if (r >= 4) LONG else SHORT
             e.putInt("round", if (r >= 4) 0 else r)
@@ -376,7 +385,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
 
         // 今日
         val cnt = remember(tick / 8) { Focus.todayCount(c) }
-        val mins = remember(tick / 8) { Focus.todayMin(c) }
+        val mins = remember(tick / 4) { Focus.todayMin(c) }
         Row(Modifier.padding(top = 36.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SoftCard(Modifier.weight(1f)) {
                 Text("今天的番茄", fontSize = 12.sp, color = C.Soft)
