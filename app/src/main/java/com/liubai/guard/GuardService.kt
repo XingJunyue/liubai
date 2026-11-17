@@ -59,6 +59,23 @@ class GuardService : AccessibilityService() {
     }
 
     private var lastWin = 0L
+    private var longSelf = false
+    private var longAt = 0L
+    private var contentOn = false
+
+    /** 只有停在桌面 / 设置 / 安装器时才监听「界面内容变化」（用来抓卸载确认框），刷视频时不监听，省电。 */
+    private fun watchContent(pkg: String?) {
+        val want = pkg != null && (pkg in SETTINGS || pkg == homePkg) && Store.protectActive(this)
+        if (want == contentOn) return
+        contentOn = want
+        try {
+            val i = serviceInfo ?: return
+            val base = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOWS_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_CLICKED or AccessibilityEvent.TYPE_VIEW_LONG_CLICKED
+            i.eventTypes = if (want) base or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED else base
+            serviceInfo = i
+        } catch (x: Exception) {}
+    }
 
     override fun onServiceConnected() {
         running = true
@@ -101,9 +118,19 @@ class GuardService : AccessibilityService() {
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
         }
-        if (evPkg != null && evPkg in SETTINGS && Store.protectActive(this) && !Unlock.open(this)) {
-            if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e) else guardDialog()
+        if (evPkg != null && (evPkg in SETTINGS || evPkg == homePkg)) {
+            // 桌面长按图标：记住按的是不是留白（小米桌面弹出的卸载菜单只有图标，没有字）
+            if (e.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
+                val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
+                longSelf = getString(R.string.app_name) in said
+                longAt = SystemClock.elapsedRealtime()
+            }
+            if (Store.protectActive(this) && !Unlock.open(this)) {
+                if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e)
+                else if (e.eventType != AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) guardDialog()
+            }
         }
+        if (st) watchContent(fg ?: evPkg)
     }
 
     private var essCache: Set<String>? = null
@@ -254,12 +281,15 @@ class GuardService : AccessibilityService() {
 
     /** 在留白的应用信息页、无障碍页里点了危险按钮或开关：退回去。 */
     private fun guardClick(e: AccessibilityEvent) {
+        val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.let { "${it.text ?: ""} ${it.contentDescription ?: ""} ${it.viewIdResourceName ?: ""}" } ?: "" } catch (x: Exception) { "" }))
+        val danger = DANGER.any { it in said } || "删除" in said || "uninstall" in said.lowercase() || "delete" in said.lowercase()
+        // 桌面：刚长按过留白，再点卸载 / 垃圾桶
+        if (e.packageName?.toString() == homePkg && longSelf && SystemClock.elapsedRealtime() - longAt < 15_000 && danger) { bounce(); return }
         val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
         val label = getString(R.string.app_name)
         if (!hasText(root, label)) return
-        val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.text ?: "" } catch (x: Exception) { "" }))
         val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
-        if (DANGER.any { it in said } || (isSwitch && hasText(root, "无障碍"))) bounce()
+        if (danger || (isSwitch && hasText(root, "无障碍"))) bounce()
     }
 
     /** 弹出的确认框（卸载留白？停用留白？）：直接取消。 */
@@ -267,9 +297,14 @@ class GuardService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastScan < 250) return
         lastScan = now
-        val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
-        if (!hasText(root, getString(R.string.app_name))) return
-        if (CANCEL.none { hasText(root, it) }) return
-        if (DANGER.any { hasText(root, it) }) bounce()
+        // 确认框不一定是「当前活动窗口」，所有窗口都看一遍
+        val roots = (try { windows.mapNotNull { it.root } } catch (x: Exception) { emptyList() }) +
+            listOfNotNull(try { rootInActiveWindow } catch (x: Exception) { null })
+        val label = getString(R.string.app_name)
+        for (root in roots) {
+            if (!hasText(root, label)) continue
+            if (CANCEL.none { hasText(root, it) }) continue
+            if (DANGER.any { hasText(root, it) } || hasText(root, "删除")) { bounce(); return }
+        }
     }
 }
