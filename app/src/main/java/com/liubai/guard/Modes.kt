@@ -121,7 +121,7 @@ fun GroupsScreen() {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     var editing by remember { mutableStateOf<Group?>(null) }
-    LaunchedEffect(Unit) { while (true) { delay(3000); tick++ } }
+    Every(5000) { tick++ }
     val active = remember(tick, editing) { Store.groupsActive(c) }
     val desired = remember(tick, editing) { Store.groupsDesired(c).associateBy { it.id } }
 

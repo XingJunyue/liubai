@@ -64,12 +64,25 @@ class GuardService : AccessibilityService() {
         }
     }
 
-    /** 省电：只有在用受守护的应用、或专注锁定中才每秒检查；平时 3 秒；熄屏 20 秒。 */
-    private fun nextDelay(): Long {
-        if (!::pm.isInitialized || !pm.isInteractive) return 20_000
+    /**
+     * 省电：切换应用由无障碍事件即时处理，定时器只负责「计时到点」。
+     * 正在用受守护的应用：2 秒一次；平时 15 秒；熄屏 60 秒（亮屏时会立刻补一次）。
+     */
+    private fun hot(): Boolean {
         val f = fg
-        val hot = (f != null && f != packageName && guarded(f)) || Focus.locking(this) || Focus.scholarLocking(this)
-        return if (hot) 1_000 else 3_000
+        return (f != null && f != packageName && guarded(f)) || Focus.scholarLocking(this)
+    }
+    private fun nextDelay(): Long {
+        if (!::pm.isInitialized || !pm.isInteractive) {
+            // 番茄钟在走：熄屏也要准时提醒，按剩余时间来排
+            return if (Focus.running(this) && Focus.pausedLeft(this) < 0) Focus.leftMs(this).coerceIn(1_000, 60_000) else 60_000
+        }
+        return if (hot()) 2_000 else 15_000
+    }
+    /** 马上检查一次，并按新的节奏排下一次。 */
+    private fun kick() { h.removeCallbacks(tick); h.post(tick) }
+    private val screen = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context?, i: Intent?) { kick() }
     }
 
     private var lastWin = 0L
@@ -79,7 +92,8 @@ class GuardService : AccessibilityService() {
 
     /** 只有停在桌面 / 设置 / 安装器时才监听「界面内容变化」（用来抓卸载确认框），刷视频时不监听，省电。 */
     private fun watchContent(pkg: String?) {
-        val want = pkg != null && (sensitive(pkg) || pkg == homePkg) && Store.protectActive(this)
+        // 桌面不监听（桌面的时钟、动画会不停触发，最耗电）；桌面的卸载靠「点击」事件就能挡住
+        val want = pkg != null && sensitive(pkg) && pkg != homePkg && "launcher" !in pkg && Store.protectActive(this)
         if (want == contentOn) return
         contentOn = want
         try {
@@ -101,6 +115,11 @@ class GuardService : AccessibilityService() {
         } catch (x: Exception) { null }
         h.removeCallbacks(tick)
         h.post(tick)
+        try {
+            registerReceiver(screen, android.content.IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
+            })
+        } catch (x: Exception) {}
         pinNotice()
         Keep.schedule(this)
     }
@@ -125,6 +144,8 @@ class GuardService : AccessibilityService() {
         instance = null
         flush()
         h.removeCallbacks(tick)
+        h.removeCallbacks(dialogCheck)
+        try { unregisterReceiver(screen) } catch (x: Exception) {}
         super.onDestroy()
     }
 
@@ -148,8 +169,10 @@ class GuardService : AccessibilityService() {
                 flush()
                 if (fg != null && fg != packageName && guarded(fg!!)) { lastWidget = 0L }  // 离开受守护应用，马上刷新一次
                 if (pkg == homePkg || (pkg != passPkg && pkg != packageName && guarded(pkg))) passPkg = null
+                val wasHot = hot()
                 fg = pkg
                 if (pkg != packageName) maybePause(pkg)
+                if (hot() != wasHot) kick()
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
         }
@@ -162,6 +185,7 @@ class GuardService : AccessibilityService() {
             }
             if (Store.protectActive(this) && !Unlock.open(this)) {
                 if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e)
+                else if (e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) laterDialog()
                 else if (e.eventType != AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) guardDialog()
             }
         }
@@ -250,11 +274,13 @@ class GuardService : AccessibilityService() {
         lastTick = now
         val t = Store.today()
         if (t != day) { day = t; flush(); Widgets.updateAll(this) }
-        // 正在用受守护的应用时，小部件 30 秒跟一次；平时 2 分钟一次（内容没变就不重绘）
-        val hot = fg?.let { it != packageName && guarded(it) } == true
-        if (now - lastWidget > (if (hot) 30_000 else 120_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
+        // 熄屏时什么都不做（小部件也看不见，不用刷新）
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); passPkg = null; return }
-        val sys = Usage.update(this)
+        // 正在用受守护的应用时，小部件 1 分钟跟一次；平时 5 分钟一次（内容没变就不重绘）
+        val hot = fg?.let { it != packageName && guarded(it) } == true
+        if (now - lastWidget > (if (hot) 60_000 else 300_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
+        // 无障碍已经知道前台是谁时，平时不去读系统用量记录；只有用受守护的应用时才读
+        val sys = if (fg == null) Usage.update(this) else null
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: Virt.map(sys)
         if (cur != null && Focus.scholarLocking(this) && reason(cur) == "scholar") { block(cur, "scholar"); return }
@@ -345,6 +371,15 @@ class GuardService : AccessibilityService() {
         if (!hasText(root, label)) return
         val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
         if (danger || (isSwitch && hasText(root, "无障碍"))) bounce()
+    }
+
+    /** 界面内容变化很频繁：合并成 0.4 秒后检查一次，而不是每次都把所有窗口翻一遍。 */
+    private var dialogPending = false
+    private val dialogCheck = Runnable { dialogPending = false; guardDialog() }
+    private fun laterDialog() {
+        if (dialogPending) return
+        dialogPending = true
+        h.postDelayed(dialogCheck, 400)
     }
 
     /** 弹出的确认框（卸载留白？停用留白？）：直接取消。 */

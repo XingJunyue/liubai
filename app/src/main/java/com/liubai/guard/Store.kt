@@ -18,7 +18,20 @@ import java.util.Locale
 object Store {
     private fun p(c: Context): SharedPreferences = c.getSharedPreferences("liubai", Context.MODE_PRIVATE)
 
-    fun today(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+    @Volatile private var tDay = ""
+    @Volatile private var tUntil = 0L
+    /** 今天的日期串；每天只算一次，不再每次新建格式化器。 */
+    fun today(): String {
+        val now = System.currentTimeMillis()
+        if (now < tUntil && now > tUntil - 86_400_000L - 3_600_000L) return tDay
+        val cal = java.util.Calendar.getInstance()
+        tDay = SimpleDateFormat("yyyyMMdd", Locale.US).format(cal.time)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+        tUntil = cal.timeInMillis
+        return tDay
+    }
 
     private val memo = java.util.concurrent.ConcurrentHashMap<String, Map<String, Int>>()
     private fun parse(s: String?): Map<String, Int> {
@@ -149,9 +162,15 @@ object Store {
     }
 
     // ---------- 睡前锁定 ----------
+    private val bmemo = java.util.concurrent.ConcurrentHashMap<String, Bed>()
     private fun bed(c: Context, key: String): Bed {
         roll(c)
-        return try { Bed.of(JSONObject(p(c).getString(key, "{}") ?: "{}")) } catch (x: Exception) { Bed() }
+        val raw = p(c).getString(key, "{}") ?: "{}"
+        bmemo[raw]?.let { return it }
+        val b = try { Bed.of(JSONObject(raw)) } catch (x: Exception) { Bed() }
+        if (bmemo.size > 8) bmemo.clear()
+        bmemo[raw] = b
+        return b
     }
     fun bedActive(c: Context) = bed(c, "ba")
     fun bedDesired(c: Context): Bed = if (p(c).contains("bd")) bed(c, "bd") else bedActive(c)

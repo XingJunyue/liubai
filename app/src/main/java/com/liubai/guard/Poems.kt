@@ -75,7 +75,7 @@ fun GreetingArea(poems: Boolean) {
     val n = Poems.ALL.size
     var i by remember { mutableStateOf(((System.currentTimeMillis() / 86_400_000L) * 7 % n).toInt()) }
     var bump by remember { mutableStateOf(0) }
-    LaunchedEffect(bump) { while (true) { delay(12_000); i = (i + 1) % n } }
+    key(bump) { Every(12_000, now = false) { i = (i + 1) % n } }
     AnimatedContent(
         targetState = i,
         transitionSpec = { fadeIn(tween(700)) togetherWith fadeOut(tween(500)) },

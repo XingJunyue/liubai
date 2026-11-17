@@ -173,7 +173,7 @@ fun DrawerItem(label: String, selected: Boolean, onClick: () -> Unit) {
 fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsOn: Boolean = true) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(2000); tick++ } }
+    Every(5000) { tick++ }
     var editing by remember { mutableStateOf<String?>(null) }
     val rows = remember(tick, editing) { Stats.rows(c) }
     val on = remember(tick) { serviceOn(c) }
@@ -331,9 +331,7 @@ fun KeepTip() {
     var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
     var done by remember { mutableStateOf(Keep.canHeal(c) || WAdb.adbMode(c)) }
     var st by remember { mutableStateOf(WAdb.status) }
-    LaunchedEffect(Unit) {
-        while (!done) { st = WAdb.status; done = Keep.canHeal(c) || WAdb.adbMode(c); delay(1000) }
-    }
+    if (!done) Every(1000) { st = WAdb.status; done = Keep.canHeal(c) || WAdb.adbMode(c) }
     fun startPair() {
         WAdb.retry(c)   // 配对过就直接授权；没配对过会自动转去等配对码
         try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

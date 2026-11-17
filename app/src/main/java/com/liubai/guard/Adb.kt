@@ -96,6 +96,7 @@ object WAdb {
     const val KEY = "code"
 
     @Volatile var status = ""          // 给首页卡片看的进度
+    @Volatile private var waitSince = 0L
     @Volatile private var pairHost: InetAddress? = null
     @Volatile private var pairPort = -1
     private var mdns: AdbMdns? = null
@@ -107,6 +108,7 @@ object WAdb {
     fun begin(c: Context) {
         val app = c.applicationContext
         status = "waiting"
+        waitSince = android.os.SystemClock.elapsedRealtime()
         try {
             mdns?.stop()
             mdns = AdbMdns(app, AdbMdns.SERVICE_TYPE_TLS_PAIRING) { host, port ->
@@ -217,6 +219,8 @@ object WAdb {
     fun scan(c: Context, roots: List<android.view.accessibility.AccessibilityNodeInfo?>) {
         if (status != "waiting") return
         val now = android.os.SystemClock.elapsedRealtime()
+        // 10 分钟还没配对就不再读屏幕，省电
+        if (now - waitSince > 10 * 60_000L) { status = ""; return }
         if (now - lastScan < 400) return
         lastScan = now
         var code: String? = null; var host: String? = null; var port = -1

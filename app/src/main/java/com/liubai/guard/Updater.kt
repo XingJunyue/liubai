@@ -45,20 +45,31 @@ object Updater {
         return con
     }
 
-    /** 各个来源都问一遍，取最大的版本号；镜像会缓存跳转，所以不能拿到第一个就停。 */
+    /**
+     * 各个来源同时问（以前是一个接一个，国内网络下要等半分钟以上）：
+     * 谁先回来就先用谁；第一个结果到了之后再多等 1.5 秒，让别的来源有机会给出更新的版本号，最多等 10 秒。
+     */
     fun latest(): Release? {
         lastError = ""
         val bust = "?t=" + System.currentTimeMillis()
+        val lock = Object()
         var best: Release? = null
         var bestMirror = ""
-        fun take(r: Release, m: String) { if (best == null || r.code > best!!.code) { best = r; bestMirror = m } }
+        var firstAt = 0L
+        var priv = false
+        fun take(r: Release, m: String) = synchronized(lock) {
+            if (best == null || r.code > best!!.code) { best = r; bestMirror = m }
+            if (firstAt == 0L) firstAt = android.os.SystemClock.elapsedRealtime()
+            lock.notifyAll()
+        }
+        val jobs = ArrayList<() -> Unit>()
         // 1) GitHub API：列出最近的发布（有更新说明）
-        try {
-            val con = open("https://api.github.com/repos/$REPO/releases?per_page=5")
+        jobs += {
+            val con = open("https://api.github.com/repos/$REPO/releases?per_page=5", 6_000)
             con.setRequestProperty("Accept", "application/vnd.github+json")
             con.setRequestProperty("Cache-Control", "no-cache")
             val rc = con.responseCode
-            if (rc == 404) lastError = "private"
+            if (rc == 404) priv = true
             if (rc == 200) {
                 val arr = org.json.JSONArray(con.inputStream.bufferedReader().readText())
                 for (k in 0 until arr.length()) {
@@ -68,34 +79,46 @@ object Updater {
                     take(Release(code, j.optString("name"), j.optString("body"), apk(code)), "")
                 }
             }
-        } catch (x: Exception) {}
+        }
         // 2) 每个镜像读 releases/latest 的跳转
-        for (m in MIRRORS) {
-            try {
-                val con = open(m + "https://github.com/$REPO/releases/latest" + bust, 6_000)
-                con.instanceFollowRedirects = false
-                con.setRequestProperty("Cache-Control", "no-cache")
-                val rc = con.responseCode
-                val loc = con.getHeaderField("Location") ?: ""
-                val code = Regex("build-(\\d+)").find(loc)?.groupValues?.get(1)?.toIntOrNull()
-                if (rc in 300..399 && code != null) take(Release(code, "留白 1.$code", "", apk(code)), m)
-                if (rc == 404 && best == null) lastError = "private"
-            } catch (x: Exception) {}
+        for (m in MIRRORS) jobs += {
+            val con = open(m + "https://github.com/$REPO/releases/latest" + bust, 6_000)
+            con.instanceFollowRedirects = false
+            con.setRequestProperty("Cache-Control", "no-cache")
+            val rc = con.responseCode
+            val loc = con.getHeaderField("Location") ?: ""
+            val code = Regex("build-(\\d+)").find(loc)?.groupValues?.get(1)?.toIntOrNull()
+            if (rc in 300..399 && code != null) take(Release(code, "留白 1.$code", "", apk(code)), m)
+            if (rc == 404) priv = true
         }
         // 3) 发布的 atom 订阅，再兜底一次
-        for (m in MIRRORS.take(2)) {
-            try {
-                val con = open(m + "https://github.com/$REPO/releases.atom" + bust, 6_000)
-                if (con.responseCode == 200) {
-                    val txt = con.inputStream.bufferedReader().readText()
-                    Regex("build-(\\d+)").findAll(txt).mapNotNull { it.groupValues[1].toIntOrNull() }.maxOrNull()
-                        ?.let { take(Release(it, "留白 1.$it", "", apk(it)), m) }
-                }
-            } catch (x: Exception) {}
+        for (m in MIRRORS.take(2)) jobs += {
+            val con = open(m + "https://github.com/$REPO/releases.atom" + bust, 6_000)
+            if (con.responseCode == 200) {
+                val txt = con.inputStream.bufferedReader().readText()
+                Regex("build-(\\d+)").findAll(txt).mapNotNull { it.groupValues[1].toIntOrNull() }.maxOrNull()
+                    ?.let { take(Release(it, "留白 1.$it", "", apk(it)), m) }
+            }
         }
-        if (best == null && lastError.isEmpty()) lastError = "network"
-        if (best != null) mirror = bestMirror
-        return best
+        var left = jobs.size
+        for (j in jobs) Thread {
+            try { j() } catch (x: Exception) {}
+            synchronized(lock) { left--; lock.notifyAll() }
+        }.apply { isDaemon = true; start() }
+        val start = android.os.SystemClock.elapsedRealtime()
+        synchronized(lock) {
+            while (true) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (left == 0 || now - start >= 10_000) break
+                if (firstAt > 0 && now - firstAt >= 1_500) break
+                val until = if (firstAt > 0) firstAt + 1_500 else start + 10_000
+                lock.wait((until - now).coerceAtLeast(1))
+            }
+        }
+        val r = synchronized(lock) { best }
+        if (r == null) lastError = if (priv) "private" else "network"
+        else mirror = synchronized(lock) { bestMirror }
+        return r
     }
 
     private fun apk(code: Int) = "https://github.com/$REPO/releases/download/build-$code/liubai-1.$code.apk"

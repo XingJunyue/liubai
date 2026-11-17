@@ -140,3 +140,27 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
         colors = ButtonDefaults.buttonColors(containerColor = C.Clay, contentColor = Color.White, disabledContainerColor = C.Track)
     ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
 }
+
+/**
+ * 只在界面真正显示在前台时才循环执行：切到后台、锁屏后立即停下，回来再继续。
+ * （之前的 while(true) 循环在后台也一直跑，白白耗电。）
+ */
+@Composable
+fun Every(ms: Long, now: Boolean = true, block: () -> Unit) {
+    val owner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var resumed by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED))
+    }
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val o = androidx.lifecycle.LifecycleEventObserver { _, _ ->
+            resumed = owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+        }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o) }
+    }
+    val cb = androidx.compose.runtime.rememberUpdatedState(block)
+    androidx.compose.runtime.LaunchedEffect(resumed) {
+        if (resumed && now) cb.value()
+        while (resumed) { kotlinx.coroutines.delay(ms); cb.value() }
+    }
+}

@@ -178,7 +178,7 @@ private fun mmss(ms: Long): String {
 fun FocusScreen(onBack: () -> Unit = {}) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { Focus.tick(c); tick++; delay(500) } }
+    Every(1000) { Focus.tick(c); tick++ }
     val notif = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     val phase = remember(tick) { Focus.phase(c) }
@@ -423,7 +423,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
 fun FocusPill(onOpen: () -> Unit) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(1000); tick++ } }
+    Every(1000) { tick++ }
     val phase = remember(tick) { Focus.phase(c) }
     val running = remember(tick) { Focus.running(c) }
     val text = when {
@@ -498,7 +498,7 @@ fun WhitelistScreen(onBack: () -> Unit) {
 fun FocusButton(onOpen: () -> Unit) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(1000); tick++ } }
+    Every(1000) { tick++ }
     val phase = remember(tick) { Focus.phase(c) }
     val frac = remember(tick) { if (phase == Focus.IDLE) 0f else 1f - Focus.leftMs(c).toFloat() / Focus.totalMs(c).coerceAtLeast(1) }
     val col = if (phase == Focus.SHORT || phase == Focus.LONG) C.Sage else C.Clay
