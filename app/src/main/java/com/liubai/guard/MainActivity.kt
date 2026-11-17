@@ -326,9 +326,9 @@ fun KeepTip() {
     var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
     if (hide) return
     SoftCard(Modifier.fillMaxWidth()) {
-        Text("锁屏后守护总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text("锁屏后留白总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "先把下面几项打开：自启动、省电策略「无限制」、最近任务里给留白加锁。\n还不行的话，用电脑连上手机（打开 USB 调试），执行一次这条命令，之后留白会自己把无障碍重新打开：",
+            "先试试允许自启动、电池设成不限制、在最近任务里给它上锁。\n还是不行，就用电脑连上（打开 USB 调试）运行一次下面这行，之后被关掉它会自己重新打开。点一下就能复制：",
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Text(Keep.ADB, fontSize = 11.sp, color = C.Ink, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -355,22 +355,21 @@ fun KeepTip() {
 fun SetupGuide() {
     val c = LocalContext.current
     SoftCard(Modifier.fillMaxWidth()) {
-        Text("还差一步：开启守护", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text("让留白陪着你", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "留白要靠「无障碍」知道你在用哪个应用，它不会读取或上传你的任何内容。",
+            "打开「无障碍」，留白才知道你此刻在用什么。它只看应用名字，不看内容，也不会上传。",
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Spacer(Modifier.height(12.dp))
-        PrimaryButton("去开启") { c.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        PrimaryButton("去打开") { c.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         Spacer(Modifier.height(14.dp))
-        Text("小米手机还需要这几步，守护才不会被系统杀掉：", fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold)
+        Text("系统有时会悄悄把它关掉，顺手做这几件小事就稳了：", fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp)
         Text(
-            "1. 无障碍里留白是灰的：先点下面按钮进应用信息，右上角 ⋮ 选「允许受限制的设置」\n" +
-                "2. 应用信息里打开「自启动」\n" +
-                "3. 「省电策略」选「无限制」\n" +
-                "4. 「其他权限」里允许「后台弹出界面」\n" +
-                "5. 最近任务里下拉留白卡片加锁\n" +
-                "其他品牌同理：自启动 / 后台运行 / 电池不优化都打开。",
+            "· 开关是灰的、点不动：进应用信息，右上角菜单里选「允许受限制的设置」\n" +
+                "· 允许留白自启动、在后台运行\n" +
+                "· 电池 / 省电里，把留白设成不限制\n" +
+                "· 允许留白在后台弹出界面\n" +
+                "· 在最近任务里给留白上把锁",
             fontSize = 13.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Text(
