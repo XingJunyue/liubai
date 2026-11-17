@@ -31,9 +31,62 @@ object Widgets {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
+    /** 一排排圆形图标，外圈画今天用掉的比例；用满变成暖橘色。 */
+    private fun icons(c: Context, rows: List<Row>, lines: Int): Bitmap {
+        val cols = 4
+        val cell = 240
+        val w = cell * cols; val h = cell * lines
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(b)
+        val sw = 16f
+        val ringR = cell * 0.40f
+        val iconR = ringR - sw - 8f
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = sw; strokeCap = Paint.Cap.ROUND }
+        for (i in 0 until cols * lines) {
+            val cx = cell * (i % cols) + cell / 2f
+            val cy = cell * (i / cols) + cell / 2f
+            val row = rows.getOrNull(i)
+            val arc = RectF(cx - ringR, cy - ringR, cx + ringR, cy + ringR)
+            if (row == null) {
+                p.color = 0x22A39589; p.strokeWidth = 4f
+                cv.drawCircle(cx, cy, iconR, p)
+                p.strokeWidth = sw
+                continue
+            }
+            p.color = 0xFFEDE6DC.toInt(); cv.drawArc(arc, 0f, 360f, false, p)
+            val f = row.frac.coerceIn(0f, 1f)
+            if (f > 0f) {
+                p.color = if (row.done) 0xFFE38B6D.toInt() else 0xFF7FAE8C.toInt()
+                cv.drawArc(arc, -90f, 360f * f, false, p)
+            }
+            try {
+                val d = c.packageManager.getApplicationIcon(row.pkg)
+                val s = (iconR * 2).toInt()
+                val ib = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+                val ic = Canvas(ib)
+                val clip = android.graphics.Path().apply { addCircle(s / 2f, s / 2f, s / 2f, android.graphics.Path.Direction.CW) }
+                ic.clipPath(clip)
+                d.setBounds(-s / 10, -s / 10, s + s / 10, s + s / 10)   // 稍放大，去掉自带的留边
+                d.draw(ic)
+                val ip = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                if (row.done) ip.alpha = 110
+                cv.drawBitmap(ib, cx - iconR, cy - iconR, ip)
+            } catch (x: Exception) {}
+        }
+        return b
+    }
+
     fun updateAll(c: Context) {
         val m = AppWidgetManager.getInstance(c) ?: return
         val rows = Stats.rows(c)
+        for ((cls, lines) in listOf(IconsWidget1::class.java to 1, IconsWidget2::class.java to 2)) {
+            val ids = m.getAppWidgetIds(ComponentName(c, cls))
+            if (ids.isEmpty()) continue
+            val v = RemoteViews(c.packageName, R.layout.widget_icons)
+            v.setImageViewBitmap(R.id.canvas, icons(c, rows, lines))
+            v.setOnClickPendingIntent(R.id.root, open(c))
+            m.updateAppWidget(ids, v)
+        }
         val (used, total) = Stats.totals(rows)
         val left = (total - used).coerceAtLeast(0)
 
@@ -86,5 +139,13 @@ class RingWidget : AppWidgetProvider() {
 }
 
 class ListWidget : AppWidgetProvider() {
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
+}
+
+class IconsWidget1 : AppWidgetProvider() {
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
+}
+
+class IconsWidget2 : AppWidgetProvider() {
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
 }
