@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 object Unlock {
-    const val NEED = 100
+    const val NEED = 10
     const val WINDOW_MS = 3 * 60_000L
     private fun p(c: Context) = c.getSharedPreferences("misc", Context.MODE_PRIVATE)
     fun until(c: Context) = p(c).getLong("unlock", 0L)
@@ -31,7 +31,7 @@ object Unlock {
     fun setGuided(c: Context) = p(c).edit().putBoolean("guided", true).apply()
 }
 
-/** 想卸载 / 结束运行 / 关无障碍：连点 100 次「确定」，之后 3 分钟内放行。 */
+/** 想卸载 / 结束运行 / 关无障碍：连点 10 次「确定」，之后 3 分钟内放行。 */
 class UnlockActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
