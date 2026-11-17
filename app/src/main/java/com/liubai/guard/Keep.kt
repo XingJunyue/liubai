@@ -21,7 +21,8 @@ object Keep {
     fun canHeal(c: Context) = c.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
 
     fun heal(c: Context) {
-        if (!canHeal(c) || GuardService.running) return
+        if (GuardService.running) return
+        if (!canHeal(c)) { if (WAdb.adbMode(c)) WAdb.healViaAdb(c); return }
         try {
             val me = "${c.packageName}/${GuardService::class.java.name}"
             val cur = Settings.Secure.getString(c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""

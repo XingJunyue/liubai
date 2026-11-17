@@ -136,21 +136,57 @@ object WAdb {
         try { nm.notify(NID, b.build()) } catch (x: SecurityException) {}
     }
 
-    /** 连上之后执行授权；有的系统要在开发者选项里多开一个「USB 调试（安全设置）」才允许。 */
-    private fun grant(app: Context, m: LiubaiAdb): String {
-        val s = m.openStream("shell:pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS")
+    private fun sh(m: LiubaiAdb, cmd: String): String {
+        val st = m.openStream("shell:$cmd")
         val out = StringBuilder()
         try {
-            val ins = s.openInputStream(); val buf = ByteArray(1024)
+            val ins = st.openInputStream(); val buf = ByteArray(1024)
             while (true) { val n = ins.read(buf); if (n <= 0) break; out.append(String(buf, 0, n)) }
         } catch (x: Exception) {}
-        try { s.close() } catch (x: Exception) {}
+        try { st.close() } catch (x: Exception) {}
+        return out.toString()
+    }
+
+    fun doneText(c: Context) = if (Keep.canHeal(c)) "以后留白被系统关掉，会自己重新打开。无线调试可以关掉了。"
+        else "以后留白被系统关掉，会自己重新打开。让「无线调试」一直开着就行；重启或换了 Wi-Fi 后，记得再打开它。"
+
+    fun adbMode(c: Context) = c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("adbMode", false)
+
+    /** 用无线调试直接把无障碍重新写回去（不需要额外的安全开关）。 */
+    private fun reopen(app: Context, m: LiubaiAdb): Boolean {
+        val me = "${app.packageName}/${GuardService::class.java.name}"
+        val cur = sh(m, "settings get secure enabled_accessibility_services").trim()
+        val list = cur.split(':').filter { it.isNotBlank() && it != "null" && !it.startsWith("${app.packageName}/") }
+        val r1 = sh(m, "settings put secure enabled_accessibility_services " + (list + me).joinToString(":"))
+        sh(m, "settings put secure accessibility_enabled 1")
+        return "Exception" !in r1
+    }
+
+    /** 连上之后：先试着要永久权限；系统不让的话，改用「无线调试模式」，不用再开任何开关。 */
+    private fun grant(app: Context, m: LiubaiAdb): String {
+        val o = sh(m, "pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS")
+        if (Keep.canHeal(app)) { try { m.disconnect() } catch (x: Exception) {}; Keep.heal(app); return "ok" }
+        val ok = try { if (GuardService.running) "Exception" !in sh(m, "settings get secure accessibility_enabled") else reopen(app, m) } catch (x: Exception) { false }
         try { m.disconnect() } catch (x: Exception) {}
-        if (Keep.canHeal(app)) { Keep.heal(app); return "ok" }
-        val o = out.toString()
-        if ("GRANT_RUNTIME_PERMISSIONS" in o || "SecurityException" in o)
-            throw Exception("已经连上了，只差最后一步：在开发者选项里打开「USB 调试（安全设置）」（在「USB 调试」下面几行），再回来点「再试一次」。")
+        if (ok) {
+            app.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("adbMode", true).apply()
+            return "ok"
+        }
         throw Exception(o.lineSequence().firstOrNull { it.isNotBlank() }?.take(120) ?: "授权没成功")
+    }
+
+    @Volatile private var lastHeal = 0L
+    fun healViaAdb(c: Context) {
+        val app = c.applicationContext
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastHeal < 60_000L || status == "working") return
+        lastHeal = now
+        thread {
+            try {
+                val m = LiubaiAdb.get(app)
+                if (m.isConnected || m.connectTls(app, 4_000)) { reopen(app, m); try { m.disconnect() } catch (x: Exception) {} }
+            } catch (x: Throwable) {}
+        }
     }
 
     /** 已经配对过的话，不用再输配对码，直接连上授权。 */
@@ -165,7 +201,7 @@ object WAdb {
                 grant(app, m)
             } catch (x: Throwable) { x.message ?: "nopair" }
             when (msg) {
-                "ok" -> { status = "done"; notify(app, "好了", "以后留白被系统关掉，会自己重新打开。无线调试可以关掉了。", false) }
+                "ok" -> { status = "done"; notify(app, "好了", doneText(app), false) }
                 "nopair" -> { status = ""; android.os.Handler(Looper.getMainLooper()).post { begin(app) } }
                 else -> status = "error:$msg"
             }
@@ -223,7 +259,7 @@ object WAdb {
             pairPort = -1
             if (msg == "ok") {
                 status = "done"
-                notify(app, "好了", "以后留白被系统关掉，会自己重新打开。无线调试可以关掉了。", false)
+                notify(app, "好了", doneText(app), false)
             } else {
                 status = "error:$msg"
                 notify(app, "没成功", msg, false)

@@ -329,10 +329,10 @@ fun UsageGuide() {
 fun KeepTip() {
     val c = LocalContext.current
     var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
-    var done by remember { mutableStateOf(Keep.canHeal(c)) }
+    var done by remember { mutableStateOf(Keep.canHeal(c) || WAdb.adbMode(c)) }
     var st by remember { mutableStateOf(WAdb.status) }
     LaunchedEffect(Unit) {
-        while (!done) { st = WAdb.status; done = Keep.canHeal(c); delay(1000) }
+        while (!done) { st = WAdb.status; done = Keep.canHeal(c) || WAdb.adbMode(c); delay(1000) }
     }
     fun startPair() {
         WAdb.retry(c)   // 配对过就直接授权；没配对过会自动转去等配对码
@@ -360,14 +360,7 @@ fun KeepTip() {
                 st.startsWith("error:") -> Text(st.removePrefix("error:").take(160), fontSize = 13.sp, color = C.ClayDeep, lineHeight = 20.sp, modifier = Modifier.padding(top = 8.dp))
             }
             Spacer(Modifier.height(12.dp))
-            if (st.startsWith("error:") && "安全设置" in st) {
-                Spacer(Modifier.height(12.dp))
-                PrimaryButton("再试一次") { WAdb.retry(c) }
-                Text("去开发者选项", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(12.dp)).clickable {
-                        try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (x: Exception) {}
-                    }.padding(vertical = 6.dp))
-            } else PrimaryButton(if (st == "waiting") "去无线调试" else "开始授权") {
+            PrimaryButton(if (st == "waiting") "去无线调试" else "开始授权") {
                 if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(c, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                     notifAsk.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 else startPair()
