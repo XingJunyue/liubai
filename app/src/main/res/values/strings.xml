@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">留白</string>
+    <string name="service_label">留白 · 时间守护</string>
+    <string name="service_desc">留白用它来知道你正在用哪个应用、累计今天的使用时长，并在额度用完时把你轻轻送回桌面。它不会读取或上传你的任何内容。</string>
+    <string name="w_ring">今天还剩多少分钟</string>
+    <string name="w_list">每个应用今天的进度</string>
+</resources>

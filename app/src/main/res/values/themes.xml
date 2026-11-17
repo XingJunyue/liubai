@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Liubai" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/cream</item>
+        <item name="android:statusBarColor">@color/cream</item>
+        <item name="android:navigationBarColor">@color/cream</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <color name="cream">#FBF6EF</color>
+    <color name="clay">#E38B6D</color>
+</resources>
