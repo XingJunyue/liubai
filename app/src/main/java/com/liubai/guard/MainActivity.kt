@@ -60,7 +60,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun App() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var screen by remember { mutableStateOf(if (Unlock.guided(ctx)) "home" else "intro") }
+    val openExtra = remember { (ctx as? android.app.Activity)?.intent?.getStringExtra("open") }
+    var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra ?: "home") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -70,7 +71,7 @@ fun App() {
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "focus"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -85,11 +86,19 @@ fun App() {
                     DrawerItem("今天", screen == "home") { go("home") }
                     DrawerItem("分组额度", screen == "groups") { go("groups") }
                     DrawerItem("睡前锁定", screen == "bed") { go("bed") }
+                    DrawerItem("专注", screen == "focus") { go("focus") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
                     DrawerItem("使用说明", screen == "guide") { go("guide") }
-                    DrawerItem("关于与更新", screen == "about") { go("about") }
                     Spacer(Modifier.weight(1f))
-                    Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(start = 12.dp, bottom = 18.dp))
+                    Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.weight(1f))
+                        Text(
+                            "关于与更新", fontSize = 13.sp,
+                            color = if (screen == "about") C.ClayDeep else C.Soft,
+                            fontWeight = if (screen == "about") FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { go("about") }.padding(horizontal = 12.dp, vertical = 8.dp)
+                        )
+                    }
                 }
             }
         }
@@ -97,7 +106,8 @@ fun App() {
         Surface(color = C.Cream, modifier = Modifier.fillMaxSize()) {
             val menu = { scope.launch { drawer.open() }; Unit }
             when (screen) {
-                "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu)
+                "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu, onFocus = { screen = "focus" })
+                "focus" -> Paged(menu) { FocusScreen() }
                 "weekly" -> Paged(menu) { WeeklyScreen() }
                 "groups" -> Paged(menu) { GroupsScreen() }
                 "bed" -> Paged(menu) { BedScreen() }
@@ -146,7 +156,7 @@ fun DrawerItem(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun Home(onAdd: () -> Unit, onMenu: () -> Unit) {
+fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(2000); tick++ } }
@@ -170,6 +180,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit) {
             Text("今天也温柔地对待自己", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
             val bed = remember(tick) { Store.bedActive(c) }
             if (bed.on) Chip("睡前锁定 ${Rules.clock(bed.from)}–${Rules.clock(bed.to)}")
+            FocusPill(onFocus)
 
             if (!usageOk) {
                 Spacer(Modifier.height(18.dp))

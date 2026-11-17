@@ -102,6 +102,7 @@ class GuardService : AccessibilityService() {
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
         if (lim == null && groups.isEmpty()) return null
+        if (Focus.locking(this)) return "focus"
         val m = Rules.nowMin()
         val bed = Store.bedActive(this)
         if (bed.on && Rules.inWin(m, bed.from, bed.to)) return "bed"
@@ -157,6 +158,7 @@ class GuardService : AccessibilityService() {
     }
 
     private fun step() {
+        Focus.tick(this)
         val now = SystemClock.elapsedRealtime()
         val dt = now - lastTick
         lastTick = now

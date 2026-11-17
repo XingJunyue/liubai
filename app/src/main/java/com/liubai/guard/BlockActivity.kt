@@ -34,6 +34,7 @@ class BlockActivity : ComponentActivity() {
         val x = Store.extraActive(this, pkg)
         val bed = Store.bedActive(this)
         val (title, sub) = when {
+            why == "focus" -> "正在专注" to "这个番茄还剩 ${(Focus.leftMs(this) / 60_000L + 1)} 分钟，先把手上的事做完"
             why == "bed" -> "该睡觉啦" to "睡前锁定到 ${Rules.clock(bed.to)}，$name 明早再见"
             why == "hard" -> "${name}今天不开放" to "这是你给自己定的，明天 0:00 才能改回来"
             why == "window" -> "现在不是${name}的时间" to "它只在 ${Rules.clock(x.from)}–${Rules.clock(x.to)} 开放"
