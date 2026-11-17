@@ -90,7 +90,7 @@ object Focus {
     fun setScholar(c: Context, v: Boolean) = p(c).edit().putBoolean("scholar", v).apply()
     fun whitelist(c: Context): Set<String> = p(c).getStringSet("wl", emptySet())!!.toSet()
     fun setWhitelist(c: Context, s: Set<String>) = p(c).edit().putStringSet("wl", s).apply()
-    /** 学霸模式生效中：专注阶段（含暂停）只放行白名单。 */
+    /** 无敌模式生效中：专注阶段（含暂停）只放行白名单。 */
     fun scholarLocking(c: Context) = phase(c) == WORK && scholar(c)
 
     /** 永远放行的系统必需品：桌面、电话、短信、输入法、权限弹窗等。 */
@@ -193,7 +193,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
     var showWl by remember { mutableStateOf(false) }
     var showNoise by remember { mutableStateOf(false) }
     var scholar by remember { mutableStateOf(Focus.scholar(c)) }
-    // 学霸模式下，专注一旦开始就不能中途暂停、重置或跳过
+    // 无敌模式下，专注一旦开始就不能中途暂停、重置或跳过
     val strict = scholar && phase == Focus.WORK
     if (showWl) { WhitelistScreen(onBack = { showWl = false }); return }
     if (showNoise) { NoiseScreen(onBack = { showNoise = false }); return }
@@ -215,7 +215,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             Text("专注", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
             Text(
                 when {
-                    scholar -> "学霸模式：专注时只开放白名单里的应用"
+                    scholar -> "无敌模式：专注时只开放白名单里的应用"
                     Focus.lockApps(c) -> "专注时，守护中的应用都会暂停开放"
                     else -> "一次只做一件事"
                 },
@@ -333,13 +333,13 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             )
         }
 
-        if (strict) Text("学霸模式下，这个番茄要做完才能停", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 12.dp))
+        if (strict) Text("无敌模式下，这个番茄要做完才能停", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 12.dp))
 
-        // 学霸模式卡片
+        // 无敌模式卡片
         SoftCard(Modifier.fillMaxWidth().padding(top = 26.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("学霸模式", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                    Text("无敌模式", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
                     Text("专注时，除了白名单都打不开", fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
                 }
                 androidx.compose.material3.Switch(
@@ -444,7 +444,7 @@ fun FocusPill(onOpen: () -> Unit) {
 }
 
 
-/** 学霸模式白名单。电话、短信、输入法、桌面默认放行，不用选。 */
+/** 无敌模式白名单。电话、短信、输入法、桌面默认放行，不用选。 */
 @Composable
 fun WhitelistScreen(onBack: () -> Unit) {
     val c = LocalContext.current
@@ -457,7 +457,7 @@ fun WhitelistScreen(onBack: () -> Unit) {
         Text("‹ 完成", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
             .clip(RoundedCornerShape(10.dp)).clickable { Focus.setWhitelist(c, sel.toSet()); onBack() }.padding(vertical = 4.dp))
         Text("白名单", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text("学霸模式下只有这些能打开。电话、短信、输入法已默认放行。", fontSize = 14.sp, color = C.Soft,
+        Text("无敌模式下只有这些能打开。电话、短信、输入法已默认放行。", fontSize = 14.sp, color = C.Soft,
             lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
         val list = apps
         if (list == null) {
