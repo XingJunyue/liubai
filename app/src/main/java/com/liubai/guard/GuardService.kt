@@ -77,6 +77,7 @@ class GuardService : AccessibilityService() {
             val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg
             if (pkg != null && pkg !in IGNORE && pkg != fg) {
                 flush()
+                if (fg != null && fg != packageName && guarded(fg!!)) { lastWidget = 0L }  // 离开受守护应用，马上刷新一次
                 if (pkg == homePkg || (pkg != passPkg && pkg != packageName && guarded(pkg))) passPkg = null
                 fg = pkg
                 if (pkg != packageName) maybePause(pkg)
@@ -157,7 +158,9 @@ class GuardService : AccessibilityService() {
         lastTick = now
         val t = Store.today()
         if (t != day) { day = t; flush(); Widgets.updateAll(this) }
-        if (now - lastWidget > 30_000) { lastWidget = now; flush(); Widgets.updateAll(this) }
+        // 正在用受守护的应用时，小部件每 3 秒跟一次；平时一分钟一次
+        val hot = fg?.let { it != packageName && guarded(it) } == true
+        if (now - lastWidget > (if (hot) 3_000 else 60_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); passPkg = null; return }
         val sys = Usage.update(this)
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡

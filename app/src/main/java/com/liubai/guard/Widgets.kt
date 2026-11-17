@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.RemoteViews
 
 object Widgets {
+    private val iconCache = HashMap<String, Bitmap>()
     private fun ring(frac: Float): Bitmap {
         val s = 300
         val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
@@ -60,14 +61,17 @@ object Widgets {
                 cv.drawArc(arc, -90f, 360f * f, false, p)
             }
             try {
-                val d = c.packageManager.getApplicationIcon(row.pkg)
                 val s = (iconR * 2).toInt()
+                val ib = iconCache.getOrPut(row.pkg) {
+                val d = c.packageManager.getApplicationIcon(row.pkg)
                 val ib = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
                 val ic = Canvas(ib)
                 val clip = android.graphics.Path().apply { addCircle(s / 2f, s / 2f, s / 2f, android.graphics.Path.Direction.CW) }
                 ic.clipPath(clip)
                 d.setBounds(-s / 10, -s / 10, s + s / 10, s + s / 10)   // 稍放大，去掉自带的留边
                 d.draw(ic)
+                ib
+                }
                 val ip = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
                 if (row.done) ip.alpha = 110
                 cv.drawBitmap(ib, cx - iconR, cy - iconR, ip)
