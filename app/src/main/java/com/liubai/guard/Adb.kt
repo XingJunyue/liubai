@@ -137,7 +137,34 @@ object WAdb {
     }
 
     /** 第二步：拿到配对码 → 配对 → 连接 → 授权。在后台线程跑。 */
+    private var lastScan = 0L
+    private val reCode = Regex("^\\s*(\\d{6})\\s*$")
+    private val reAddr = Regex("(\\d{1,3}(?:\\.\\d{1,3}){3}):(\\d{2,5})")
+
+    /** 无障碍在设置里看到配对弹窗时，直接把配对码和端口读出来，不用手输。 */
+    fun scan(c: Context, roots: List<android.view.accessibility.AccessibilityNodeInfo?>) {
+        if (status != "waiting") return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastScan < 400) return
+        lastScan = now
+        var code: String? = null; var host: String? = null; var port = -1
+        fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, d: Int) {
+            if (n == null || d > 30) return
+            val t = n.text?.toString()
+            if (t != null) {
+                reCode.find(t)?.let { if (code == null) code = it.groupValues[1] }
+                reAddr.find(t)?.let { host = it.groupValues[1]; port = it.groupValues[2].toIntOrNull() ?: -1 }
+            }
+            for (i in 0 until n.childCount) walk(try { n.getChild(i) } catch (x: Exception) { null }, d + 1)
+        }
+        for (r in roots) try { walk(r, 0) } catch (x: Exception) {}
+        val cd = code ?: return
+        if (port > 0) { try { pairHost = InetAddress.getByName(host) } catch (x: Exception) {}; pairPort = port }
+        pairAndGrant(c, cd)
+    }
+
     fun pairAndGrant(c: Context, code: String) {
+        if (status == "working") return
         val app = c.applicationContext
         status = "working"
         notify(app, "正在配对…", "稍等几秒", false)

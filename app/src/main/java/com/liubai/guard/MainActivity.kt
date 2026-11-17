@@ -334,6 +334,12 @@ fun KeepTip() {
     LaunchedEffect(Unit) {
         while (!done) { st = WAdb.status; done = Keep.canHeal(c); delay(1000) }
     }
+    fun startPair() {
+        WAdb.begin(c)
+        try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (x: Exception) { c.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    val notifAsk = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { startPair() }
     if (hide || done) return
     SoftCard(Modifier.fillMaxWidth()) {
         Text("锁屏后留白总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
@@ -343,9 +349,9 @@ fun KeepTip() {
         } else {
             Text(
                 "授权一次，以后被系统关掉它会自己重新打开。连着 Wi-Fi 就行，不用电脑，也不用装别的：\n" +
-                    "1. 点下面的按钮，通知栏会出现一个输入框\n" +
-                    "2. 打开开发者选项里的「无线调试」，点「使用配对码配对设备」\n" +
-                    "3. 弹窗别关，下拉通知栏，把弹窗上的 6 位数字填进去\n" +
+                    "1. 点「开始授权」，会跳到开发者选项\n" +
+                    "2. 打开「无线调试」，点进去，再点「使用配对码配对设备」\n" +
+                    "3. 出现 6 位配对码后，留白会自己读出来完成配对；没反应的话，下拉通知栏把数字填进去\n" +
                     "没有开发者选项的话，去「关于手机」连点版本号 7 次。",
                 fontSize = 13.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 6.dp)
             )
@@ -354,10 +360,10 @@ fun KeepTip() {
                 st.startsWith("error:") -> Text(st.removePrefix("error:"), fontSize = 13.sp, color = C.ClayDeep, lineHeight = 20.sp, modifier = Modifier.padding(top = 8.dp))
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(if (st == "waiting") "已发通知，去无线调试" else "开始授权") {
-                WAdb.begin(c)
-                try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                catch (x: Exception) { c.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            PrimaryButton(if (st == "waiting") "去无线调试" else "开始授权") {
+                if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(c, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    notifAsk.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                else startPair()
             }
         }
         Row(Modifier.padding(top = 8.dp)) {

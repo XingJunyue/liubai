@@ -135,6 +135,9 @@ class GuardService : AccessibilityService() {
         val evPkg = e.packageName?.toString()
         val st = e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if (st) Virt.see(evPkg, e.className?.toString())
+        if (WAdb.status == "waiting" && evPkg != null && "settings" in evPkg) {
+            WAdb.scan(this, try { windows.map { it.root } + rootInActiveWindow } catch (x: Exception) { listOf(rootInActiveWindow) })
+        }
         if (st || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             // 「窗口列表变化」事件很频繁（输入法、悬浮窗都会触发）：节流，少跨进程取窗口树
             val nowW = SystemClock.elapsedRealtime()
