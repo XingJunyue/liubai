@@ -112,9 +112,11 @@ object Focus {
     /** 守护服务和界面都会调用：到点就收尾并提醒。 */
     @Synchronized
     fun tick(c: Context) {
+        Noise.sync(c)
         if (!running(c) || System.currentTimeMillis() < endAt(c)) return
         val ph = phase(c)
         finish(c, counted = true)
+        Noise.sync(c)
         notifyDone(c, ph)
     }
 
@@ -279,6 +281,26 @@ fun FocusScreen() {
             )
         }
 
+        // 白噪音：一行轻量文字标签
+        var nk by remember { mutableStateOf(Noise.kind(c)) }
+        Row(
+            Modifier.padding(top = 26.dp).clip(RoundedCornerShape(20.dp)).background(C.Card).padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            for ((k, label) in Noise.KINDS) {
+                val on = k == nk
+                Text(
+                    label, fontSize = 13.sp,
+                    color = if (on) Color.White else C.Soft,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (on) accent else Color.Transparent)
+                        .clickable { nk = k; Noise.setKind(c, k) }.padding(horizontal = 12.dp, vertical = 7.dp)
+                )
+            }
+        }
+        if (nk != "off") Text(if (Noise.inBreak(c)) "专注和休息时播放" else "仅专注时播放",
+            fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
+
         // 今日
         val cnt = remember(tick / 8) { Focus.todayCount(c) }
         val mins = remember(tick / 8) { Focus.todayMin(c) }
@@ -311,6 +333,10 @@ fun FocusScreen() {
                 StepSlider("短休", ls, 3..20, 1, "分钟") { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
                 StepSlider("长休", ll, 10..40, 5, "分钟") { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
                 Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
+                var vol by remember { mutableStateOf(Noise.volume(c)) }
+                var nb by remember { mutableStateOf(Noise.inBreak(c)) }
+                StepSlider("白噪音音量", vol, 10..100, 10, "%") { vol = it; Noise.setVolume(c, it) }
+                Toggle("休息时也播放白噪音", "默认只在专注时播放", nb) { nb = it; Noise.setInBreak(c, it); tick++ }
                 Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
             }
         }
