@@ -17,7 +17,9 @@ jobs:
       - run: gradle :app:assembleRelease --no-daemon
       - run: cp app/build/outputs/apk/release/app-release.apk liubai-1.${{ github.run_number }}.apk
       - uses: actions/upload-artifact@v4
-        with: { name: liubai-apk, path: liubai-1.${{ github.run_number }}.apk }
+        with:
+          name: liubai-apk
+          path: liubai-1.${{ github.run_number }}.apk
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
