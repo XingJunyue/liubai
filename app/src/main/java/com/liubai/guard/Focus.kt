@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -284,7 +285,8 @@ fun FocusScreen() {
         // 白噪音：一行轻量文字标签
         var nk by remember { mutableStateOf(Noise.kind(c)) }
         Row(
-            Modifier.padding(top = 26.dp).clip(RoundedCornerShape(20.dp)).background(C.Card).padding(horizontal = 6.dp, vertical = 4.dp),
+            Modifier.padding(top = 26.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.Card)
+                .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             for ((k, label) in Noise.KINDS) {
