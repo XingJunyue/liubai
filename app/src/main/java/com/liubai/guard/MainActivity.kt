@@ -66,6 +66,7 @@ fun App() {
     var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra ?: "home") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     var poemsOn by remember { mutableStateOf(Poems.on(ctx)) }
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
     if (screen != "setup" && screen != "picker" && screen != "intro") UpdatePrompt()
