@@ -67,7 +67,6 @@ fun App() {
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     var poemsOn by remember { mutableStateOf(Poems.on(ctx)) }
-    val scope = rememberCoroutineScope()
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
     if (screen != "setup" && screen != "picker" && screen != "intro") UpdatePrompt()
     BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }
@@ -324,23 +323,55 @@ fun UsageGuide() {
 fun KeepTip() {
     val c = LocalContext.current
     var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
-    if (hide) return
+    var has by remember { mutableStateOf(Shz.installed(c)) }
+    var run by remember { mutableStateOf(false) }
+    var want by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(Keep.canHeal(c)) }
+    LaunchedEffect(Unit) {
+        while (!done) {
+            has = Shz.installed(c); run = has && Shz.running()
+            if (want && run && !busy) {
+                if (!Shz.permitted()) { Shz.ask(); want = false }
+                else {
+                    busy = true
+                    val ok = withContext(Dispatchers.IO) { Shz.grant(c) }
+                    busy = false; want = false
+                    if (ok) { done = true; Keep.heal(c); android.widget.Toast.makeText(c, "好了，以后被关掉它会自己回来", android.widget.Toast.LENGTH_LONG).show() }
+                    else android.widget.Toast.makeText(c, "没成功，再点一次试试", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            delay(1200)
+        }
+    }
+    if (hide || done) return
     SoftCard(Modifier.fillMaxWidth()) {
         Text("锁屏后留白总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "先试试允许自启动、电池设成不限制、在最近任务里给它上锁。\n还是不行，就用电脑连上（打开 USB 调试）运行一次下面这行，之后被关掉它会自己重新打开。点一下就能复制：",
+            "先试试允许自启动、电池设成不限制、在最近任务里给它上锁。\n" +
+                "想一劳永逸：装个 Shizuku，在开发者选项里打开「无线调试」，按它的提示配对一次（连上 Wi-Fi 就行，不用电脑），再回来点一下授权。之后留白被关掉会自己重新打开。",
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
-        Text(Keep.ADB, fontSize = 11.sp, color = C.Ink, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-            modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(C.Track).clickable {
-                val cm = c.getSystemService(android.content.ClipboardManager::class.java)
-                cm?.setPrimaryClip(android.content.ClipData.newPlainText("adb", Keep.ADB))
-                android.widget.Toast.makeText(c, "已复制", android.widget.Toast.LENGTH_SHORT).show()
-            }.padding(10.dp))
+        Spacer(Modifier.height(12.dp))
+        val label = when {
+            busy -> "授权中…"
+            !has -> "下载 Shizuku"
+            !run -> "打开 Shizuku 去配对"
+            else -> "一键授权"
+        }
+        PrimaryButton(label) {
+            when {
+                busy -> {}
+                !has -> c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Shz.DOWNLOAD)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                !run -> c.packageManager.getLaunchIntentForPackage(Shz.PKG)?.let { c.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                else -> { want = true; if (!Shz.permitted()) Shz.ask() }
+            }
+        }
         Row(Modifier.padding(top = 8.dp)) {
-            Text("打开应用信息", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            Text("开发者选项", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
-                    c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    catch (x: Exception) { c.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }.padding(vertical = 6.dp))
             Spacer(Modifier.weight(1f))
             Text("知道了", color = C.Faint, fontSize = 14.sp,

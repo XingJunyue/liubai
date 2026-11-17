@@ -42,6 +42,30 @@ object Keep {
     }
 }
 
+/** 无线调试授权：借 Shizuku（在手机上用「无线调试」启动，不用电脑），让留白给自己授予 WRITE_SECURE_SETTINGS。 */
+object Shz {
+    const val PKG = "moe.shizuku.privileged.api"
+    const val DOWNLOAD = "https://github.com/RikkaApps/Shizuku/releases"
+
+    fun installed(c: Context) = try { c.packageManager.getPackageInfo(PKG, 0); true } catch (x: Exception) { false }
+    fun running() = try { rikka.shizuku.Shizuku.pingBinder() } catch (x: Throwable) { false }
+    fun permitted() = try { rikka.shizuku.Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED } catch (x: Throwable) { false }
+    fun ask() { try { rikka.shizuku.Shizuku.requestPermission(7) } catch (x: Throwable) {} }
+
+    /** 在后台线程调用 */
+    fun grant(c: Context): Boolean {
+        try {
+            val m = rikka.shizuku.Shizuku::class.java.getDeclaredMethod(
+                "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java
+            )
+            m.isAccessible = true
+            val p = m.invoke(null, arrayOf("pm", "grant", c.packageName, Manifest.permission.WRITE_SECURE_SETTINGS), null, null) as Process
+            p.waitFor()
+        } catch (x: Throwable) {}
+        return Keep.canHeal(c)
+    }
+}
+
 class KeepReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent?) {
         Keep.heal(c)
