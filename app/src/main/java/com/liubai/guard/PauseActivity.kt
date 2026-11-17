@@ -36,7 +36,7 @@ class PauseActivity : ComponentActivity() {
     private fun proceed(pkg: String) {
         GuardService.instance?.pass(pkg)
         finish()
-        packageManager.getLaunchIntentForPackage(pkg)?.let {
+        packageManager.getLaunchIntentForPackage(Virt.real(pkg))?.let {
             try { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (x: Exception) {}
         }
     }

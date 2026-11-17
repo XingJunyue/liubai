@@ -134,12 +134,13 @@ class GuardService : AccessibilityService() {
         e ?: return
         val evPkg = e.packageName?.toString()
         val st = e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        if (st) Virt.see(evPkg, e.className?.toString())
         if (st || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             // 「窗口列表变化」事件很频繁（输入法、悬浮窗都会触发）：节流，少跨进程取窗口树
             val nowW = SystemClock.elapsedRealtime()
             if (!st && nowW - lastWin < 700) return
             lastWin = nowW
-            val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg
+            val pkg = Virt.map(try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg)
             if (pkg != null && pkg !in IGNORE && pkg != fg) {
                 flush()
                 if (fg != null && fg != packageName && guarded(fg!!)) { lastWidget = 0L }  // 离开受守护应用，马上刷新一次
@@ -252,13 +253,14 @@ class GuardService : AccessibilityService() {
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); passPkg = null; return }
         val sys = Usage.update(this)
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
-        val cur = fg ?: sys
+        val cur = fg ?: Virt.map(sys)
         if (cur != null && Focus.scholarLocking(this) && reason(cur) == "scholar") { block(cur, "scholar"); return }
         if (cur != null && cur != packageName && guarded(cur)) {
             reason(cur)?.let { block(cur, it); return }
             watch(cur)
         }
-        if (Usage.grantedCached(this)) { pendMs = 0; pendPkg = null; return } // 系统用量为准，避免重复计时
+        // 系统用量为准，避免重复计时；视频号这类应用内的一块系统分不出来，只能自己计
+        if (Usage.grantedCached(this) && fg?.let { Virt.isVirt(it) } != true) { pendMs = 0; pendPkg = null; return }
         val p = fg ?: return
         if (p == packageName || !guarded(p)) return
         if (dt in 1..5000) {
@@ -281,6 +283,25 @@ class GuardService : AccessibilityService() {
         if (now - lastBlock < 1500 || (pkg == lastBlockPkg && now - lastBlock < 5000)) return
         lastBlock = now
         lastBlockPkg = pkg
+        if (Virt.isVirt(pkg)) {
+            // 只退出视频号，不把整个微信关掉：连按返回直到离开，再盖上提示
+            fg = packageName
+            var n = 0
+            val back = object : Runnable {
+                override fun run() {
+                    if (Virt.inFinder && n < 8) { n++; performGlobalAction(GLOBAL_ACTION_BACK); h.postDelayed(this, 280) }
+                    else try {
+                        startActivity(Intent(this@GuardService, BlockActivity::class.java)
+                            .putExtra("pkg", pkg).putExtra("why", why)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    } catch (x: Exception) {}
+                }
+            }
+            h.post(back)
+            Widgets.updateAll(this)
+            passPkg = null
+            return
+        }
         performGlobalAction(GLOBAL_ACTION_HOME)
         Widgets.updateAll(this)
         try {
