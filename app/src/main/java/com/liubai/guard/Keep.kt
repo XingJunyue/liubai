@@ -21,7 +21,10 @@ object Keep {
     fun canHeal(c: Context) = c.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
 
     fun heal(c: Context) {
-        if (GuardService.running) return
+        // 开着且最近十分钟收到过事件才算真的在干活；亮屏时长时间没事件，多半被系统冻住了，重开一次
+        val pm = c.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val stale = pm?.isInteractive == true && SystemClock.elapsedRealtime() - GuardService.lastEvent > 10 * 60_000L
+        if (GuardService.running && !stale) return
         if (!canHeal(c)) { if (WAdb.adbMode(c)) WAdb.healViaAdb(c); return }
         try {
             val me = "${c.packageName}/${GuardService::class.java.name}"

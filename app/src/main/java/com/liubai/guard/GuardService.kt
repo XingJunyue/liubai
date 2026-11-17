@@ -13,6 +13,8 @@ class GuardService : AccessibilityService() {
     companion object {
         @Volatile var running = false
         @Volatile var instance: GuardService? = null
+        /** 最近一次收到无障碍事件的时间；太久没有说明服务被系统冻住了（看起来开着，其实不干活）。 */
+        @Volatile var lastEvent = 0L
         private val IGNORE = setOf("com.android.systemui")
         private val SETTINGS = setOf(
             "com.android.settings", "com.miui.securitycenter", "com.miui.packageinstaller", "com.miui.home", "com.miui.permcenter",
@@ -89,6 +91,8 @@ class GuardService : AccessibilityService() {
     private var longSelf = false
     private var longAt = 0L
     private var contentOn = false
+    private var sysSeen: String? = null
+    private var sysSince = 0L
 
     /** 只有停在桌面 / 设置 / 安装器时才监听「界面内容变化」（用来抓卸载确认框），刷视频时不监听，省电。 */
     private fun watchContent(pkg: String?) {
@@ -110,6 +114,7 @@ class GuardService : AccessibilityService() {
         instance = this
         pm = getSystemService(POWER_SERVICE) as PowerManager
         lastTick = SystemClock.elapsedRealtime()
+        lastEvent = lastTick
         homePkg = try {
             packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
         } catch (x: Exception) { null }
@@ -145,6 +150,7 @@ class GuardService : AccessibilityService() {
         flush()
         h.removeCallbacks(tick)
         h.removeCallbacks(dialogCheck)
+        h.removeCallbacks(armScan)
         try { unregisterReceiver(screen) } catch (x: Exception) {}
         super.onDestroy()
     }
@@ -153,6 +159,7 @@ class GuardService : AccessibilityService() {
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
         e ?: return
+        lastEvent = SystemClock.elapsedRealtime()
         val evPkg = e.packageName?.toString()
         val st = e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if (st) Virt.see(evPkg, e.className?.toString())
@@ -182,6 +189,7 @@ class GuardService : AccessibilityService() {
                 val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
                 longSelf = getString(R.string.app_name) in said
                 longAt = SystemClock.elapsedRealtime()
+                if ((evPkg == homePkg || "launcher" in evPkg) && Store.protectActive(this)) armLauncher()
             }
             if (Store.protectActive(this) && !Unlock.open(this)) {
                 if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e)
@@ -279,8 +287,13 @@ class GuardService : AccessibilityService() {
         // 正在用受守护的应用时，小部件 1 分钟跟一次；平时 5 分钟一次（内容没变就不重绘）
         val hot = fg?.let { it != packageName && guarded(it) } == true
         if (now - lastWidget > (if (hot) 60_000 else 300_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
-        // 无障碍已经知道前台是谁时，平时不去读系统用量记录；只有用受守护的应用时才读
-        val sys = if (fg == null) Usage.update(this) else null
+        // 系统用量记录做对照：无障碍事件被系统停掉时（常见于更新后、一夜之后），靠它也能认出前台是谁
+        val sys = Usage.update(this)
+        val sysApp = Virt.map(sys)
+        if (sysApp != null && sysApp != fg && sysApp != packageName && guarded(sysApp) && now - lastBlock > 10_000) {
+            if (sysSeen != sysApp) { sysSeen = sysApp; sysSince = now }
+            else if (now - sysSince >= 4_000) { fg = sysApp; sysSeen = null }
+        } else sysSeen = null
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: Virt.map(sys)
         if (cur != null && Focus.scholarLocking(this) && reason(cur) == "scholar") { block(cur, "scholar"); return }
@@ -371,6 +384,24 @@ class GuardService : AccessibilityService() {
         if (!hasText(root, label)) return
         val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
         if (danger || (isSwitch && hasText(root, "无障碍"))) bounce()
+    }
+
+    /**
+     * 桌面平时不监听界面变化（省电），所以桌面弹出的「卸载留白？」框收不到事件。
+     * 在桌面长按过图标（含拖到卸载区）后的 20 秒里，每半秒看一眼有没有这个框，看到就挡。
+     */
+    private var armUntil = 0L
+    private val armScan = object : Runnable {
+        override fun run() {
+            if (SystemClock.elapsedRealtime() > armUntil) return
+            if (Store.protectActive(this@GuardService) && !Unlock.open(this@GuardService)) { lastScan = 0L; guardDialog() }
+            h.postDelayed(this, 500)
+        }
+    }
+    private fun armLauncher() {
+        val fresh = SystemClock.elapsedRealtime() > armUntil
+        armUntil = SystemClock.elapsedRealtime() + 20_000
+        if (fresh) { h.removeCallbacks(armScan); h.postDelayed(armScan, 300) }
     }
 
     /** 界面内容变化很频繁：合并成 0.4 秒后检查一次，而不是每次都把所有窗口翻一遍。 */
