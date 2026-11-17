@@ -88,15 +88,14 @@ fun App() {
                     DrawerItem("睡前锁定", screen == "bed") { go("bed") }
                     DrawerItem("专注", screen == "focus") { go("focus") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
-                    DrawerItem("使用说明", screen == "guide") { go("guide") }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.weight(1f))
                         Text(
-                            "关于与更新", fontSize = 13.sp,
-                            color = if (screen == "about") C.ClayDeep else C.Soft,
-                            fontWeight = if (screen == "about") FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { go("about") }.padding(horizontal = 12.dp, vertical = 8.dp)
+                            "使用说明", fontSize = 13.sp,
+                            color = if (screen == "guide") C.ClayDeep else C.Soft,
+                            fontWeight = if (screen == "guide") FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { go("guide") }.padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
                 }
