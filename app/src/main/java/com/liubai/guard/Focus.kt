@@ -178,7 +178,7 @@ private fun mmss(ms: Long): String {
 fun FocusScreen(onBack: () -> Unit = {}) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { Focus.tick(c); tick++; delay(250) } }
+    LaunchedEffect(Unit) { while (true) { Focus.tick(c); tick++; delay(500) } }
     val notif = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     val phase = remember(tick) { Focus.phase(c) }

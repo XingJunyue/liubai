@@ -46,9 +46,19 @@ class GuardService : AccessibilityService() {
     private val tick = object : Runnable {
         override fun run() {
             step()
-            h.postDelayed(this, 1000)
+            h.postDelayed(this, nextDelay())
         }
     }
+
+    /** 省电：只有在用受守护的应用、或专注锁定中才每秒检查；平时 3 秒；熄屏 20 秒。 */
+    private fun nextDelay(): Long {
+        if (!::pm.isInitialized || !pm.isInteractive) return 20_000
+        val f = fg
+        val hot = (f != null && f != packageName && guarded(f)) || Focus.locking(this) || Focus.scholarLocking(this)
+        return if (hot) 1_000 else 3_000
+    }
+
+    private var lastWin = 0L
 
     override fun onServiceConnected() {
         running = true
@@ -75,7 +85,12 @@ class GuardService : AccessibilityService() {
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
         e ?: return
         val evPkg = e.packageName?.toString()
-        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+        val st = e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        if (st || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            // 「窗口列表变化」事件很频繁（输入法、悬浮窗都会触发）：节流，少跨进程取窗口树
+            val nowW = SystemClock.elapsedRealtime()
+            if (!st && nowW - lastWin < 700) return
+            lastWin = nowW
             val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg
             if (pkg != null && pkg !in IGNORE && pkg != fg) {
                 flush()
@@ -173,9 +188,9 @@ class GuardService : AccessibilityService() {
         lastTick = now
         val t = Store.today()
         if (t != day) { day = t; flush(); Widgets.updateAll(this) }
-        // 正在用受守护的应用时，小部件每 3 秒跟一次；平时一分钟一次
+        // 正在用受守护的应用时，小部件 30 秒跟一次；平时 2 分钟一次（内容没变就不重绘）
         val hot = fg?.let { it != packageName && guarded(it) } == true
-        if (now - lastWidget > (if (hot) 3_000 else 60_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
+        if (now - lastWidget > (if (hot) 30_000 else 120_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); passPkg = null; return }
         val sys = Usage.update(this)
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡

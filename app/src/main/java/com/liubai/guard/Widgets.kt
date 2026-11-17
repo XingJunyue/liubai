@@ -80,9 +80,17 @@ object Widgets {
         return b
     }
 
-    fun updateAll(c: Context) {
+    private var lastSig = ""
+    private var lastSigAt = 0L
+
+    fun updateAll(c: Context, force: Boolean = false) {
         val m = AppWidgetManager.getInstance(c) ?: return
         val rows = Stats.rows(c)
+        // 内容没变（分钟数一样）就不重画、不推给桌面，省电省发热；每 30 分钟兜底强刷一次
+        val sig = rows.joinToString("|") { "${it.pkg}:${it.usedMin}:${it.limit}:${it.done}" }
+        val now = System.currentTimeMillis()
+        if (!force && sig == lastSig && now - lastSigAt < 30 * 60_000L) return
+        lastSig = sig; lastSigAt = now
         for ((cls, lines) in listOf(IconsWidget1::class.java to 1, IconsWidget2::class.java to 2)) {
             val ids = m.getAppWidgetIds(ComponentName(c, cls))
             if (ids.isEmpty()) continue
@@ -139,17 +147,17 @@ object Widgets {
 }
 
 class RingWidget : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
 }
 
 class ListWidget : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
 }
 
 class IconsWidget1 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
 }
 
 class IconsWidget2 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
 }

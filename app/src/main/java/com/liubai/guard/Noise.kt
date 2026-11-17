@@ -4,11 +4,9 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import kotlin.math.PI
-import kotlin.math.sin
 import kotlin.random.Random
 
-/** 番茄钟白噪音：全部实时合成，不占安装包体积。 */
+/** 番茄钟白噪音：自然声用真实录音循环播放；纯噪音预先算好一段再循环。 */
 object Noise {
     val KINDS = listOf(
         "off" to "关", "rain" to "雨声", "storm" to "雷雨", "waves" to "海浪", "stream" to "溪流",
@@ -30,7 +28,7 @@ object Noise {
     fun inBreak(c: Context) = p(c).getBoolean("noiseBreak", false)
     fun setInBreak(c: Context, v: Boolean) { p(c).edit().putBoolean("noiseBreak", v).apply(); sync(c) }
     fun volume(c: Context) = p(c).getInt("noiseVol", 60)
-    fun setVolume(c: Context, v: Int) { p(c).edit().putInt("noiseVol", v).apply(); vol = v / 100f; player?.setVolume(vol, vol) }
+    fun setVolume(c: Context, v: Int) { p(c).edit().putInt("noiseVol", v).apply(); vol = v / 100f; player?.setVolume(vol, vol); try { track?.setVolume(vol) } catch (x: Exception) {} }
 
     @Volatile private var playing: String? = null
     /** 选择界面里的试听：不论是否在专注，都先放这个。 */
@@ -67,72 +65,55 @@ object Noise {
         player = null
         thread?.join(400)
         thread = null
+        try { track?.stop(); track?.release() } catch (x: Exception) {}
+        track = null
+    }
+
+    private var track: AudioTrack? = null
+    private val bufCache = HashMap<String, ShortArray>()
+
+    /** 纯噪音：只算一次 6 秒的片段（首尾交叉淡化，无接缝），交给系统循环播放，播放时 CPU 几乎不用干活。 */
+    private fun clip(k: String): ShortArray = bufCache.getOrPut(k) {
+        val rate = 22050
+        val n = rate * 6; val fade = rate / 2
+        val raw = FloatArray(n + fade)
+        val r = Random(42)
+        var b0 = 0f; var b1 = 0f; var b2 = 0f; var brown = 0f; var lp = 0f
+        for (i in raw.indices) {
+            val w = r.nextFloat() * 2f - 1f
+            b0 = 0.99765f * b0 + w * 0.0990460f
+            b1 = 0.96300f * b1 + w * 0.2965164f
+            b2 = 0.57000f * b2 + w * 1.0526913f
+            val pink = (b0 + b1 + b2 + w * 0.1848f) * 0.18f
+            brown = (brown + w * 0.02f).coerceIn(-1f, 1f) * 0.998f
+            raw[i] = when (k) {
+                "white" -> { lp += (w - lp) * 0.55f; lp * 0.63f }
+                "brown" -> brown * 1.2f
+                else -> pink * 0.72f
+            }
+        }
+        // 尾部多算的半秒淡入到开头，循环时听不出接缝
+        for (i in 0 until fade) { val a = i / fade.toFloat(); raw[i] = raw[i] * a + raw[n + i] * (1f - a) }
+        ShortArray(n) { i -> val v = raw[i]; ((v / (1f + kotlin.math.abs(v) * 0.5f)) * 26000f).coerceIn(-32000f, 32000f).toInt().toShort() }
     }
 
     private fun play(k: String) {
         playing = k
         thread = Thread {
-            val rate = 22050
-            val buf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                .setAudioFormat(AudioFormat.Builder().setSampleRate(rate)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-                .setBufferSizeInBytes(buf * 4).build()
-            track.play()
-            val out = ShortArray(1024)
-            val r = Random(System.nanoTime())
-            var b0 = 0f; var b1 = 0f; var b2 = 0f; var brown = 0f; var lp = 0f
-            var t = 0L; var g = 0f; var drop = 0f
-            var bp1 = 0f; var bp2 = 0f; var wl = 0f; var crack = 0f
-            while (playing == k) {
-                for (i in out.indices) {
-                    val w = r.nextFloat() * 2f - 1f
-                    // 粉红噪声（Paul Kellet 近似）
-                    b0 = 0.99765f * b0 + w * 0.0990460f
-                    b1 = 0.96300f * b1 + w * 0.2965164f
-                    b2 = 0.57000f * b2 + w * 1.0526913f
-                    val pink = (b0 + b1 + b2 + w * 0.1848f) * 0.18f
-                    brown = (brown + w * 0.02f).coerceIn(-1f, 1f) * 0.998f
-                    val s = when (k) {
-                        "white" -> { lp += (w - lp) * 0.55f; lp * 0.63f }
-                        "brown" -> brown * 1.2f
-                        "pink" -> pink * 0.72f
-                        "wind" -> {
-                            val sec = t / rate.toFloat()
-                            val gust = 0.15f + 0.85f * (0.5f + 0.5f * sin(2 * PI * sec / 7.0).toFloat() * sin(2 * PI * sec / 2.9 + 1).toFloat())
-                            val k2 = 0.01f + 0.05f * gust
-                            wl += (w - wl) * k2
-                            wl * 3.75f * gust
-                        }
-                        "fire" -> {
-                            // 篝火：低沉的燃烧声 + 偶尔成串的噼啪
-                            if (r.nextFloat() < 0.0012f || (crack > 0.05f && r.nextFloat() < 0.002f)) crack = 0.3f + r.nextFloat() * 0.7f
-                            crack *= 0.9f
-                            (brown * 1.1f + pink * 0.2f + w * crack * 0.7f) * 0.9f
-                        }
-                        "wave" -> {
-                            val sec = t / rate.toFloat()
-                            val swell = 0.25f + 0.75f * ((sin(2 * PI * sec / 9.0) * 0.5 + 0.5).toFloat().let { it * it })
-                            (brown * 1.6f + pink * 0.6f) * swell * 0.8f
-                        }
-                        else -> { // rain：粉红底噪 + 稀疏雨滴
-                            // 细密的雨：高频偏重的底噪 + 很多轻小的雨滴
-                            bp1 += (w - bp1) * 0.6f; bp2 += (bp1 - bp2) * 0.05f
-                            if (r.nextFloat() < 0.004f) drop = 0.2f + r.nextFloat() * 0.4f
-                            drop *= 0.97f
-                            ((bp1 - bp2) * 0.55f + pink * 0.25f + w * drop * 0.3f) * 0.9f
-                        }
-                    }
-                    g += ((vol) - g) * 0.0005f // 平滑淡入/音量变化
-                    val soft = s / (1f + kotlin.math.abs(s) * 0.5f) // 柔和限幅，避免爆音
-                    out[i] = (soft * g * 26000f).coerceIn(-32000f, 32000f).toInt().toShort()
-                    t++
-                }
-                track.write(out, 0, out.size)
-            }
-            track.stop(); track.release()
+            try {
+                val data = clip(k)
+                val t = AudioTrack.Builder()
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    .setAudioFormat(AudioFormat.Builder().setSampleRate(22050)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(data.size * 2).build()
+                t.write(data, 0, data.size)
+                t.setLoopPoints(0, data.size, -1)
+                t.setVolume(vol)
+                if (playing == k) { t.play(); track = t } else t.release()
+            } catch (x: Exception) {}
         }.apply { isDaemon = true; start() }
     }
 }
