@@ -247,6 +247,17 @@ fun AboutScreen() {
                 else -> PrimaryButton("检查更新") { check() }
             }
         }
+        Spacer(Modifier.height(14.dp))
+        SoftCard(Modifier.fillMaxWidth()) {
+            Text("没拦住？", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+            Text("复制诊断信息发给开发者，能看出是哪一步没接上。只包含守护状态和最近的界面事件。", fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+            PrimaryButton("复制诊断信息") {
+                val cm = c.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("留白诊断", Diag.report(c)))
+                android.widget.Toast.makeText(c, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

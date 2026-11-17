@@ -109,7 +109,11 @@ class GuardService : AccessibilityService() {
         } catch (x: Exception) {}
     }
 
+    fun fgNow() = fg
+    fun homeNow() = homePkg
+
     override fun onServiceConnected() {
+        Diag.log("服务连上")
         running = true
         instance = this
         pm = getSystemService(POWER_SERVICE) as PowerManager
@@ -184,6 +188,8 @@ class GuardService : AccessibilityService() {
             fg?.let { p -> reason(p)?.let { block(p, it) } }
         }
         if (evPkg != null && (sensitive(evPkg) || evPkg == homePkg)) {
+            if (e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
+                Diag.log("事件 ${AccessibilityEvent.eventTypeToString(e.eventType).removePrefix("TYPE_")} $evPkg ${e.className ?: ""} 「${(e.text.joinToString(" ") + " " + (e.contentDescription ?: "")).trim().take(40)}」")
             // 桌面长按图标：记住按的是不是留白（小米桌面弹出的卸载菜单只有图标，没有字）
             if (e.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
                 val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
@@ -294,7 +300,7 @@ class GuardService : AccessibilityService() {
         val sysApp = Virt.map(sys)
         if (sysApp != null && sysApp != fg && sysApp != packageName && guarded(sysApp) && now - lastBlock > 10_000) {
             if (sysSeen != sysApp) { sysSeen = sysApp; sysSince = now }
-            else if (now - sysSince >= 4_000) { fg = sysApp; sysSeen = null }
+            else if (now - sysSince >= 4_000) { Diag.log("无障碍没报，按系统记录认出 $sysApp（原 $fg）"); fg = sysApp; sysSeen = null }
         } else sysSeen = null
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: Virt.map(sys)
@@ -323,6 +329,7 @@ class GuardService : AccessibilityService() {
 
     private fun block(pkg: String, why: String) {
         flush()
+        Diag.log("拦 $pkg $why")
         val now = SystemClock.elapsedRealtime()
         if (now - lastBlock < 1500 || (pkg == lastBlockPkg && now - lastBlock < 5000)) return
         lastBlock = now
@@ -366,6 +373,7 @@ class GuardService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastGuard < 800) return
         lastGuard = now
+        Diag.log("挡住卸载/关闭")
         dismissDialog()
         performGlobalAction(GLOBAL_ACTION_BACK)
         h.postDelayed({
@@ -404,6 +412,7 @@ class GuardService : AccessibilityService() {
         }
     }
     private fun armLauncher() {
+        if (SystemClock.elapsedRealtime() > armUntil) Diag.log("开始盯桌面弹框")
         val fresh = SystemClock.elapsedRealtime() > armUntil
         armUntil = SystemClock.elapsedRealtime() + 20_000
         if (fresh) { h.removeCallbacks(armScan); h.postDelayed(armScan, 300) }
@@ -447,7 +456,10 @@ class GuardService : AccessibilityService() {
         val label = getString(R.string.app_name)
         for (root in roots) {
             if (!hasText(root, label)) continue
-            if (CANCEL.none { hasText(root, it) }) continue
+            if (CANCEL.none { hasText(root, it) }) {
+                if (DANGER.any { hasText(root, it) }) Diag.log("看到含「留白」和危险字的窗口 ${root.packageName}，但没找到取消")
+                continue
+            }
             if (DANGER.any { hasText(root, it) } || hasText(root, "删除")) { bounce(); return }
         }
     }
