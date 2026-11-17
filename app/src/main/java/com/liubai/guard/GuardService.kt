@@ -101,6 +101,23 @@ class GuardService : AccessibilityService() {
         } catch (x: Exception) { null }
         h.removeCallbacks(tick)
         h.post(tick)
+        pinNotice()
+        Keep.schedule(this)
+    }
+
+    /** 常驻一条安静的通知：系统把它当前台服务，锁屏后不容易被杀。 */
+    private fun pinNotice() {
+        try {
+            val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
+            nm.createNotificationChannel(android.app.NotificationChannel("keep", "守护常驻", android.app.NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) })
+            val pi = android.app.PendingIntent.getActivity(this, 8, Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), android.app.PendingIntent.FLAG_IMMUTABLE)
+            val n = androidx.core.app.NotificationCompat.Builder(this, "keep").setSmallIcon(R.drawable.ic_mono)
+                .setContentTitle("留白守护中").setContentText("锁屏后也会一直在").setOngoing(true)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN).setContentIntent(pi).build()
+            if (android.os.Build.VERSION.SDK_INT >= 34) startForeground(88, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            else startForeground(88, n)
+        } catch (x: Exception) {}
     }
 
     override fun onDestroy() {

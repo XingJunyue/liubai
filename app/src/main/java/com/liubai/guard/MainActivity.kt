@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        Keep.heal(this)
+        Keep.schedule(this)
         Widgets.updateAll(this)
     }
 }
@@ -199,6 +201,10 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
                 Spacer(Modifier.height(18.dp))
                 SetupGuide()
             }
+            if (on && !Keep.canHeal(c)) {
+                Spacer(Modifier.height(14.dp))
+                KeepTip()
+            }
 
             Spacer(Modifier.height(18.dp))
             SoftCard(Modifier.fillMaxWidth(), brush = Brush.linearGradient(listOf(Color(0xFFFFF4EA), Color(0xFFFDEBDD)))) {
@@ -313,6 +319,38 @@ fun UsageGuide() {
     }
 }
 
+/** 一次性的 adb 授权：之后无障碍被系统关掉，留白会自己重新打开。 */
+@Composable
+fun KeepTip() {
+    val c = LocalContext.current
+    var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
+    if (hide) return
+    SoftCard(Modifier.fillMaxWidth()) {
+        Text("锁屏后守护总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(
+            "先把下面几项打开：自启动、省电策略「无限制」、最近任务里给留白加锁。\n还不行的话，用电脑连上手机（打开 USB 调试），执行一次这条命令，之后留白会自己把无障碍重新打开：",
+            fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
+        )
+        Text(Keep.ADB, fontSize = 11.sp, color = C.Ink, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(C.Track).clickable {
+                val cm = c.getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("adb", Keep.ADB))
+                android.widget.Toast.makeText(c, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+            }.padding(10.dp))
+        Row(Modifier.padding(top = 8.dp)) {
+            Text("打开应用信息", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                    c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.padding(vertical = 6.dp))
+            Spacer(Modifier.weight(1f))
+            Text("知道了", color = C.Faint, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                    c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("keepTipHide", true).apply(); hide = true
+                }.padding(vertical = 6.dp, horizontal = 8.dp))
+        }
+    }
+}
+
 @Composable
 fun SetupGuide() {
     val c = LocalContext.current
@@ -331,7 +369,8 @@ fun SetupGuide() {
                 "2. 应用信息里打开「自启动」\n" +
                 "3. 「省电策略」选「无限制」\n" +
                 "4. 「其他权限」里允许「后台弹出界面」\n" +
-                "5. 最近任务里下拉留白卡片加锁",
+                "5. 最近任务里下拉留白卡片加锁\n" +
+                "其他品牌同理：自启动 / 后台运行 / 电池不优化都打开。",
             fontSize = 13.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Text(

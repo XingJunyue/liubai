@@ -147,17 +147,17 @@ object Widgets {
 }
 
 class RingWidget : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = run { Keep.heal(c); Widgets.updateAll(c, force = true) }
 }
 
 class ListWidget : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = run { Keep.heal(c); Widgets.updateAll(c, force = true) }
 }
 
 class IconsWidget1 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = run { Keep.heal(c); Widgets.updateAll(c, force = true) }
 }
 
 class IconsWidget2 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = Widgets.updateAll(c, force = true)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = run { Keep.heal(c); Widgets.updateAll(c, force = true) }
 }
