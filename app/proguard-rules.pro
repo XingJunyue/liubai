@@ -1,3 +1,12 @@
--keep class rikka.shizuku.** { *; }
--keep class moe.shizuku.** { *; }
--dontwarn rikka.**
+-keep class io.github.muntashirakon.** { *; }
+-keep class android.sun.** { *; }
+-keep class org.conscrypt.** { *; }
+-keep class org.bouncycastle.** { *; }
+-dontwarn io.github.muntashirakon.**
+-dontwarn android.sun.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn com.android.org.conscrypt.**
+-dontwarn org.apache.harmony.**
+-dontwarn sun.**
+-dontwarn javax.naming.**

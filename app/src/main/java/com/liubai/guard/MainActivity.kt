@@ -327,55 +327,41 @@ fun UsageGuide() {
 fun KeepTip() {
     val c = LocalContext.current
     var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
-    var has by remember { mutableStateOf(Shz.installed(c)) }
-    var run by remember { mutableStateOf(false) }
-    var want by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf(Keep.canHeal(c)) }
+    var st by remember { mutableStateOf(WAdb.status) }
     LaunchedEffect(Unit) {
-        while (!done) {
-            has = Shz.installed(c); run = has && Shz.running()
-            if (want && run && !busy) {
-                if (!Shz.permitted()) { Shz.ask(); want = false }
-                else {
-                    busy = true
-                    val ok = withContext(Dispatchers.IO) { Shz.grant(c) }
-                    busy = false; want = false
-                    if (ok) { done = true; Keep.heal(c); android.widget.Toast.makeText(c, "好了，以后被关掉它会自己回来", android.widget.Toast.LENGTH_LONG).show() }
-                    else android.widget.Toast.makeText(c, "没成功，再点一次试试", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            }
-            delay(1200)
-        }
+        while (!done) { st = WAdb.status; done = Keep.canHeal(c); delay(1000) }
     }
     if (hide || done) return
     SoftCard(Modifier.fillMaxWidth()) {
         Text("锁屏后留白总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-        Text(
-            "先试试允许自启动、电池设成不限制、在最近任务里给它上锁。\n" +
-                "想一劳永逸：装个 Shizuku，在开发者选项里打开「无线调试」，按它的提示配对一次（连上 Wi-Fi 就行，不用电脑），再回来点一下授权。之后留白被关掉会自己重新打开。",
-            fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
-        )
-        Spacer(Modifier.height(12.dp))
-        val label = when {
-            busy -> "授权中…"
-            !has -> "下载 Shizuku"
-            !run -> "打开 Shizuku 去配对"
-            else -> "一键授权"
-        }
-        PrimaryButton(label) {
+        if (!WAdb.supported()) {
+            Text("允许它自启动、电池设成不限制、在最近任务里给它上把锁，就能少被关掉。",
+                fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
+        } else {
+            Text(
+                "授权一次，以后被系统关掉它会自己重新打开。连着 Wi-Fi 就行，不用电脑，也不用装别的：\n" +
+                    "1. 点下面的按钮，通知栏会出现一个输入框\n" +
+                    "2. 打开开发者选项里的「无线调试」，点「使用配对码配对设备」\n" +
+                    "3. 弹窗别关，下拉通知栏，把弹窗上的 6 位数字填进去\n" +
+                    "没有开发者选项的话，去「关于手机」连点版本号 7 次。",
+                fontSize = 13.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 6.dp)
+            )
             when {
-                busy -> {}
-                !has -> c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Shz.DOWNLOAD)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                !run -> c.packageManager.getLaunchIntentForPackage(Shz.PKG)?.let { c.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                else -> { want = true; if (!Shz.permitted()) Shz.ask() }
+                st == "working" -> Text("正在配对…", fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.padding(top = 8.dp))
+                st.startsWith("error:") -> Text(st.removePrefix("error:"), fontSize = 13.sp, color = C.ClayDeep, lineHeight = 20.sp, modifier = Modifier.padding(top = 8.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton(if (st == "waiting") "已发通知，去无线调试" else "开始授权") {
+                WAdb.begin(c)
+                try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (x: Exception) { c.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             }
         }
         Row(Modifier.padding(top = 8.dp)) {
-            Text("开发者选项", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            Text("打开应用信息", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
-                    try { c.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                    catch (x: Exception) { c.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }.padding(vertical = 6.dp))
             Spacer(Modifier.weight(1f))
             Text("知道了", color = C.Faint, fontSize = 14.sp,
