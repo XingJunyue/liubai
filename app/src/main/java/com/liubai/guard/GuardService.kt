@@ -19,7 +19,9 @@ class GuardService : AccessibilityService() {
             "com.android.packageinstaller", "com.google.android.packageinstaller", "com.miui.home",
             "com.miui.permcenter"
         )
-        private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "无障碍", "清除数据", "清除全部数据", "Uninstall", "Force stop", "Accessibility")
+        // 只拦真正会关掉守护的按钮；页面本身随便看
+        private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "Uninstall", "Force stop", "Clear data", "Disable")
+        private val CANCEL = listOf("取消", "Cancel")
     }
 
     private val h = Handler(Looper.getMainLooper())
@@ -84,7 +86,9 @@ class GuardService : AccessibilityService() {
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
         }
-        if (evPkg != null && evPkg in SETTINGS && Store.protectActive(this)) guardSettings()
+        if (evPkg != null && evPkg in SETTINGS && Store.protectActive(this)) {
+            if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e) else guardDialog()
+        }
     }
 
     private fun guarded(pkg: String): Boolean =
@@ -205,19 +209,35 @@ class GuardService : AccessibilityService() {
         passPkg = null
     }
 
-    private fun guardSettings() {
+    private fun hasText(root: android.view.accessibility.AccessibilityNodeInfo, w: String) =
+        try { root.findAccessibilityNodeInfosByText(w).isNotEmpty() } catch (x: Exception) { false }
+
+    private fun bounce() {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastGuard < 800 || now - lastScan < 250) return
-        lastScan = now
-        val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
-        val label = getString(R.string.app_name)
-        val hits = try { root.findAccessibilityNodeInfosByText(label) } catch (x: Exception) { null }
-        if (hits.isNullOrEmpty()) return
-        val danger = DANGER.any { w -> try { root.findAccessibilityNodeInfosByText(w).isNotEmpty() } catch (x: Exception) { false } }
-        if (!danger) return
+        if (now - lastGuard < 800) return
         lastGuard = now
         performGlobalAction(GLOBAL_ACTION_BACK)
-        h.postDelayed({ performGlobalAction(GLOBAL_ACTION_HOME) }, 150)
         Toast.makeText(this, "留白正在守护你，今天先不改啦。想停用的话，在留白里移除所有应用，明天 0:00 起生效。", Toast.LENGTH_LONG).show()
+    }
+
+    /** 在留白的应用信息页、无障碍页里点了危险按钮或开关：退回去。 */
+    private fun guardClick(e: AccessibilityEvent) {
+        val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
+        val label = getString(R.string.app_name)
+        if (!hasText(root, label)) return
+        val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.text ?: "" } catch (x: Exception) { "" }))
+        val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
+        if (DANGER.any { it in said } || (isSwitch && hasText(root, "无障碍"))) bounce()
+    }
+
+    /** 弹出的确认框（卸载留白？停用留白？）：直接取消。 */
+    private fun guardDialog() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastScan < 250) return
+        lastScan = now
+        val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
+        if (!hasText(root, getString(R.string.app_name))) return
+        if (CANCEL.none { hasText(root, it) }) return
+        if (DANGER.any { hasText(root, it) }) bounce()
     }
 }
