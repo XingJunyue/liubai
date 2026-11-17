@@ -22,7 +22,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -192,10 +191,12 @@ fun FocusScreen(onBack: () -> Unit = {}) {
     val frac by animateFloatAsState(if (total <= 0) 0f else 1f - left.toFloat() / total, tween(300), label = "f")
     var showSet by remember { mutableStateOf(false) }
     var showWl by remember { mutableStateOf(false) }
+    var showNoise by remember { mutableStateOf(false) }
     var scholar by remember { mutableStateOf(Focus.scholar(c)) }
     // 学霸模式下，专注一旦开始就不能中途暂停、重置或跳过
     val strict = scholar && phase == Focus.WORK
     if (showWl) { WhitelistScreen(onBack = { showWl = false }); return }
+    if (showNoise) { NoiseScreen(onBack = { showNoise = false }); return }
 
     fun startNow(ph: Int) {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -362,26 +363,21 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             if (strict) Text("专注中不能改，休息时再调整", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
         }
 
-        // 白噪音：一行轻量文字标签
-        var nk by remember { mutableStateOf(Noise.kind(c)) }
+        // 白噪音：一行入口，点开单独选
+        val nk = remember(showNoise, tick / 4) { Noise.kind(c) }
         Row(
-            Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.Card)
-                .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp),
+            Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.Card)
+                .clickable { showNoise = true }.padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            for ((k, label) in Noise.KINDS) {
-                val on = k == nk
-                Text(
-                    label, fontSize = 13.sp,
-                    color = if (on) Color.White else C.Soft,
-                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (on) accent else Color.Transparent)
-                        .clickable { nk = k; Noise.setKind(c, k) }.padding(horizontal = 12.dp, vertical = 7.dp)
-                )
+            Column(Modifier.weight(1f)) {
+                Text("白噪音", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                Text(if (Noise.inBreak(c)) "专注和休息时播放" else "仅专注时播放", fontSize = 12.sp, color = C.Soft,
+                    modifier = Modifier.padding(top = 2.dp))
             }
+            Text(Noise.label(nk), fontSize = 14.sp, color = if (nk == "off") C.Faint else accent, fontWeight = FontWeight.Medium)
+            Text("  ›", fontSize = 16.sp, color = C.Faint)
         }
-        if (nk != "off") Text(if (Noise.inBreak(c)) "专注和休息时播放" else "仅专注时播放",
-            fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
 
         // 今日
         val cnt = remember(tick / 8) { Focus.todayCount(c) }
@@ -415,10 +411,6 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 StepSlider("短休", ls, 3..20, 1, "分钟") { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
                 StepSlider("长休", ll, 10..40, 5, "分钟") { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
                 Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
-                var vol by remember { mutableStateOf(Noise.volume(c)) }
-                var nb by remember { mutableStateOf(Noise.inBreak(c)) }
-                StepSlider("白噪音音量", vol, 10..100, 10, "%") { vol = it; Noise.setVolume(c, it) }
-                Toggle("休息时也播放白噪音", "默认只在专注时播放", nb) { nb = it; Noise.setInBreak(c, it); tick++ }
                 Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
             }
         }
@@ -527,5 +519,64 @@ fun FocusButton(onOpen: () -> Unit) {
             if (phase == Focus.IDLE) "专注" else mmss(Focus.leftMs(c)),
             fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.Medium
         )
+    }
+}
+
+
+/** 白噪音选择页：两列卡片，点一下即试听，返回后停止试听。 */
+@Composable
+fun NoiseScreen(onBack: () -> Unit) {
+    val c = LocalContext.current
+    var sel by remember { mutableStateOf(Noise.kind(c)) }
+    var vol by remember { mutableStateOf(Noise.volume(c)) }
+    var nb by remember { mutableStateOf(Noise.inBreak(c)) }
+    val leave = { Noise.preview = null; Noise.sync(c); onBack() }
+    DisposableEffect(Unit) { onDispose { Noise.preview = null; Noise.sync(c) } }
+    androidx.activity.compose.BackHandler { leave() }
+    val groups = listOf(
+        "自然" to listOf("rain", "storm", "waves", "stream", "wind", "fireplace", "summer_night", "birds"),
+        "城市" to listOf("coffee_shop", "city", "train", "boat"),
+        "纯噪音" to listOf("white", "pink", "brown")
+    )
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
+        Text("‹ 完成", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
+            .clip(RoundedCornerShape(10.dp)).clickable { leave() }.padding(vertical = 4.dp))
+        Text("白噪音", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+        Text("点一下试听，选好后专注时自动播放", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+
+        @Composable
+        fun cell(k: String, mod: Modifier) {
+            val on = k == sel
+            Box(
+                mod.height(60.dp).clip(RoundedCornerShape(18.dp))
+                    .background(if (on) C.Clay else C.Card)
+                    .clickable {
+                        sel = k; Noise.setKind(c, k)
+                        Noise.preview = if (k == "off") null else k
+                        Noise.sync(c)
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(Noise.label(k), fontSize = 15.sp, color = if (on) Color.White else C.Ink,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+
+        cell("off", Modifier.padding(top = 20.dp).fillMaxWidth())
+        for ((title, ks) in groups) {
+            Text(title, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp))
+            for (row in ks.chunked(2)) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    for (k in row) cell(k, Modifier.weight(1f))
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+
+        SoftCard(Modifier.fillMaxWidth().padding(top = 16.dp)) {
+            StepSlider("音量", vol, 10..100, 10, "%") { vol = it; Noise.setVolume(c, it) }
+            Toggle("休息时也播放", "默认只在专注时播放", nb) { nb = it; Noise.setInBreak(c, it) }
+        }
+        Spacer(Modifier.height(32.dp))
     }
 }

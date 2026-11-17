@@ -33,6 +33,9 @@ object Noise {
     fun setVolume(c: Context, v: Int) { p(c).edit().putInt("noiseVol", v).apply(); vol = v / 100f; player?.setVolume(vol, vol) }
 
     @Volatile private var playing: String? = null
+    /** 选择界面里的试听：不论是否在专注，都先放这个。 */
+    @Volatile var preview: String? = null
+    fun label(k: String) = KINDS.firstOrNull { it.first == k }?.second ?: "关"
     @Volatile private var vol = 0.6f
     private var thread: Thread? = null
 
@@ -41,7 +44,7 @@ object Noise {
     fun sync(c: Context) {
         vol = volume(c) / 100f
         val ph = Focus.phase(c)
-        val want = kind(c).takeIf {
+        val want = preview?.takeIf { it != "off" } ?: kind(c).takeIf {
             it != "off" && Focus.running(c) && (ph == Focus.WORK || (inBreak(c) && ph != Focus.IDLE))
         }
         if (want == playing) return
