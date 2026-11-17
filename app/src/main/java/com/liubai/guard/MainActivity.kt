@@ -64,6 +64,7 @@ fun App() {
     var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra ?: "home") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
+    var poemsOn by remember { mutableStateOf(Poems.on(ctx)) }
     val scope = rememberCoroutineScope()
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
     if (screen != "setup" && screen != "picker" && screen != "intro") UpdatePrompt()
@@ -88,6 +89,14 @@ fun App() {
                     DrawerItem("睡前锁定", screen == "bed") { go("bed") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
                     Spacer(Modifier.weight(1f))
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("首页诗句", fontSize = 15.sp, color = C.Ink)
+                            Text("轮换温暖的诗词，点一下换一句", fontSize = 12.sp, color = C.Faint)
+                        }
+                        Switch(poemsOn, { poemsOn = it; Poems.setOn(ctx, it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = C.Clay, checkedThumbColor = androidx.compose.ui.graphics.Color.White, uncheckedTrackColor = C.Track, uncheckedBorderColor = C.Track))
+                    }
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.weight(1f))
                         Text(
@@ -104,7 +113,7 @@ fun App() {
         Surface(color = C.Cream, modifier = Modifier.fillMaxSize()) {
             val menu = { scope.launch { drawer.open() }; Unit }
             when (screen) {
-                "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu, onFocus = { screen = "focus" })
+                "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu, onFocus = { screen = "focus" }, poemsOn = poemsOn)
                 "focus" -> Box(Modifier.fillMaxSize().systemBarsPadding()) { FocusScreen(onBack = { screen = "home" }) }
                 "weekly" -> Paged(menu) { WeeklyScreen() }
                 "groups" -> Paged(menu) { GroupsScreen() }
@@ -154,7 +163,7 @@ fun DrawerItem(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}) {
+fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsOn: Boolean = true) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(2000); tick++ } }
@@ -178,8 +187,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}) {
             }
             Spacer(Modifier.height(14.dp))
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
-            Text(Stats.greeting(), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
-            Text("今天也温柔地对待自己", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+            GreetingArea(poemsOn)
             val bed = remember(tick) { Store.bedActive(c) }
             if (bed.on) Chip("睡前锁定 ${Rules.clock(bed.from)}–${Rules.clock(bed.to)}")
 
