@@ -86,7 +86,7 @@ class GuardService : AccessibilityService() {
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
         }
-        if (evPkg != null && evPkg in SETTINGS && Store.protectActive(this)) {
+        if (evPkg != null && evPkg in SETTINGS && Store.protectActive(this) && !Unlock.open(this)) {
             if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e) else guardDialog()
         }
     }
@@ -217,7 +217,12 @@ class GuardService : AccessibilityService() {
         if (now - lastGuard < 800) return
         lastGuard = now
         performGlobalAction(GLOBAL_ACTION_BACK)
-        Toast.makeText(this, "留白正在守护你，今天先不改啦。想停用的话，在留白里移除所有应用，明天 0:00 起生效。", Toast.LENGTH_LONG).show()
+        h.postDelayed({
+            try {
+                startActivity(Intent(this, UnlockActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            } catch (x: Exception) {}
+        }, 200)
     }
 
     /** 在留白的应用信息页、无障碍页里点了危险按钮或开关：退回去。 */

@@ -59,17 +59,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun App() {
-    var screen by remember { mutableStateOf("home") }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var screen by remember { mutableStateOf(if (Unlock.guided(ctx)) "home" else "intro") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
-    if (screen != "setup" && screen != "picker") UpdatePrompt()
+    if (screen != "setup" && screen != "picker" && screen != "intro") UpdatePrompt()
     BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -85,6 +86,7 @@ fun App() {
                     DrawerItem("分组额度", screen == "groups") { go("groups") }
                     DrawerItem("睡前锁定", screen == "bed") { go("bed") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
+                    DrawerItem("使用说明", screen == "guide") { go("guide") }
                     DrawerItem("关于与更新", screen == "about") { go("about") }
                     Spacer(Modifier.weight(1f))
                     Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(start = 12.dp, bottom = 18.dp))
@@ -100,6 +102,10 @@ fun App() {
                 "groups" -> Paged(menu) { GroupsScreen() }
                 "bed" -> Paged(menu) { BedScreen() }
                 "about" -> Paged(menu) { AboutScreen() }
+                "guide" -> Paged(menu) { GuideScreen() }
+                "intro" -> Column(Modifier.fillMaxSize().systemBarsPadding().padding(top = 16.dp)) {
+                    GuideScreen { Unlock.setGuided(ctx); screen = "home" }
+                }
                 "picker" -> Picker(onBack = { screen = "home" }, onNext = { picked = it; screen = "setup" })
                 "setup" -> Setup(picked, onBack = { screen = "picker" }, onDone = { screen = "home" })
             }
