@@ -25,6 +25,9 @@
         <activity android:name=".BlockActivity" android:exported="false"
             android:excludeFromRecents="true" android:launchMode="singleTask"
             android:taskAffinity="com.liubai.guard.block" />
+        <activity android:name=".PauseActivity" android:exported="false"
+            android:excludeFromRecents="true" android:launchMode="singleTask"
+            android:taskAffinity="com.liubai.guard.pause" />
         <service android:name=".GuardService" android:exported="false"
             android:label="@string/service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

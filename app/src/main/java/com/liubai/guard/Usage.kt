@@ -18,6 +18,15 @@ object Usage {
     private var cur: String? = null
     private var curStart = 0L
     private val totals = HashMap<String, Long>()
+    private var lastCall = 0L
+    private var grantAt = 0L
+    private var grantOk = false
+
+    fun grantedCached(c: Context): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - grantAt > 10_000) { grantAt = now; grantOk = granted(c) }
+        return grantOk
+    }
 
     @Suppress("DEPRECATION")
     fun granted(c: Context): Boolean {
@@ -41,9 +50,11 @@ object Usage {
     /** 读取到现在为止的用量；返回当前前台应用（读不到为 null）。 */
     @Synchronized
     fun update(c: Context): String? {
-        if (!granted(c)) return null
-        val t = Store.today()
         val now = System.currentTimeMillis()
+        if (now - lastCall < 1000 && day == Store.today()) return cur   // 一秒内只查一次系统记录，避免卡顿
+        lastCall = now
+        if (!grantedCached(c)) return null
+        val t = Store.today()
         if (t != day) {
             day = t; totals.clear(); cur = null; lastTs = midnight(); curStart = lastTs
         }

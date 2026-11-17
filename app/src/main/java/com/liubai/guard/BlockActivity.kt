@@ -30,6 +30,23 @@ class BlockActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) { override fun handleOnBackPressed() = home() })
         val pkg = intent.getStringExtra("pkg") ?: ""
         val name = Apps.info(this, pkg).label
+        val why = intent.getStringExtra("why") ?: "daily"
+        val x = Store.extraActive(this, pkg)
+        val bed = Store.bedActive(this)
+        val (title, sub) = when {
+            why == "bed" -> "该睡觉啦" to "睡前锁定到 ${Rules.clock(bed.to)}，$name 明早再见"
+            why == "hard" -> "${name}今天不开放" to "这是你给自己定的，明天 0:00 才能改回来"
+            why == "window" -> "现在不是${name}的时间" to "它只在 ${Rules.clock(x.from)}–${Rules.clock(x.to)} 开放"
+            why == "cool" -> {
+                val m = ((Store.coolUntil(this, pkg) - System.currentTimeMillis()) / 60_000L + 1).coerceAtLeast(1)
+                "这一轮刷够啦" to "单次 ${x.session} 分钟已满，歇 $m 分钟再来"
+            }
+            why.startsWith("group:") -> {
+                val g = Store.groupsActive(this).firstOrNull { it.id == why.removePrefix("group:") }
+                "「${g?.name ?: "分组"}」今天的时间用完啦" to "明天 0:00 再见 · 还有 ${Stats.untilMidnight()}"
+            }
+            else -> "今天的${name}时间用完啦" to "明天 0:00 再见 · 还有 ${Stats.untilMidnight()}"
+        }
         val tips = listOf(
             Color(0xFFFBE3D7) to "去倒杯温水",
             Color(0xFFEAF2EC) to "站起来伸个懒腰",
@@ -47,9 +64,9 @@ class BlockActivity : ComponentActivity() {
                         Spacer(Modifier.height(56.dp))
                         Sprout(150.dp, ring = false, moon = true)
                         Spacer(Modifier.height(18.dp))
-                        Text("今天的${name}时间用完啦", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = C.Ink, textAlign = TextAlign.Center)
+                        Text(title, fontSize = 25.sp, fontWeight = FontWeight.Bold, color = C.Ink, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(10.dp))
-                        Text("明天 0:00 再见 · 还有 ${Stats.untilMidnight()}", fontSize = 15.sp, color = C.Soft)
+                        Text(sub, fontSize = 15.sp, color = C.Soft, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(26.dp))
                         for ((col, t) in tips) {
                             SoftCard(Modifier.fillMaxWidth().padding(bottom = 10.dp), pad = 14.dp) {

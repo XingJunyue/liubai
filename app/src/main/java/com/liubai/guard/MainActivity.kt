@@ -68,7 +68,7 @@ fun App() {
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen == "home" || screen == "weekly" || screen == "about",
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -81,6 +81,8 @@ fun App() {
                         }
                     }
                     DrawerItem("今天", screen == "home") { go("home") }
+                    DrawerItem("分组额度", screen == "groups") { go("groups") }
+                    DrawerItem("睡前锁定", screen == "bed") { go("bed") }
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
                     DrawerItem("关于与更新", screen == "about") { go("about") }
                     Spacer(Modifier.weight(1f))
@@ -94,6 +96,8 @@ fun App() {
             when (screen) {
                 "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu)
                 "weekly" -> Paged(menu) { WeeklyScreen() }
+                "groups" -> Paged(menu) { GroupsScreen() }
+                "bed" -> Paged(menu) { BedScreen() }
                 "about" -> Paged(menu) { AboutScreen() }
                 "picker" -> Picker(onBack = { screen = "home" }, onNext = { picked = it; screen = "setup" })
                 "setup" -> Setup(picked, onBack = { screen = "picker" }, onDone = { screen = "home" })
@@ -157,6 +161,8 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit) {
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
             Text(Stats.greeting(), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
             Text("今天也温柔地对待自己", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+            val bed = remember(tick) { Store.bedActive(c) }
+            if (bed.on) Chip("睡前锁定 ${Rules.clock(bed.from)}–${Rules.clock(bed.to)}")
 
             if (!usageOk) {
                 Spacer(Modifier.height(18.dp))
@@ -220,6 +226,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit) {
                                 FlowRowLite {
                                     if (r.done) Chip("今天已休息 · 明天 0:00 见")
                                     else if (r.left <= 10) Chip("只剩 ${r.left} 分钟啦", warm = true)
+                                    for (t in Rules.summary(Store.extraActive(c, r.pkg))) Chip(t)
                                     when (r.tomorrow) {
                                         null -> {}
                                         0 -> Chip("明天起不再守护", warm = true)
@@ -253,9 +260,10 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit) {
     editing?.let { pkg -> EditSheet(pkg) { editing = null; tick++ } }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FlowRowLite(content: @Composable RowScope.() -> Unit) {
-    Row(Modifier.fillMaxWidth(), content = content)
+    FlowRow(Modifier.fillMaxWidth()) { content() }
 }
 
 @Composable
@@ -318,12 +326,14 @@ fun EditSheet(pkg: String, onClose: () -> Unit) {
     val wanted = remember { Store.desired(c)[pkg] ?: today }
     var v by remember { mutableStateOf(wanted.toFloat()) }
     val usedMin = remember { (Store.usedMs(c, pkg) / 60_000L).toInt() }
+    val xToday = remember { Store.extraActive(c, pkg) }
+    var x by remember { mutableStateOf(Store.extraDesired(c, pkg)) }
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val n = v.toInt()
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = C.Card,
         dragHandle = { Box(Modifier.padding(top = 14.dp, bottom = 18.dp).size(40.dp, 5.dp).clip(CircleShape).background(Color(0xFFE5DACE))) }) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 30.dp).navigationBarsPadding()) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 30.dp).navigationBarsPadding()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(app)
                 Spacer(Modifier.width(14.dp))
@@ -347,25 +357,26 @@ fun EditSheet(pkg: String, onClose: () -> Unit) {
                     ) { Text("$q", fontSize = 14.sp, color = if (sel) C.ClayDeep else C.Ink, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) }
                 }
             }
+            ModeEditor(x) { x = it }
+            val looser = Rules.stricter(xToday, x) != x
             val note = when {
-                n < today -> "调低会马上生效，今天就按 $n 分钟。"
+                n > today && looser -> "调高时长、放宽守护方式要明天 0:00 才生效，更严的部分现在就生效。"
                 n > today -> "调高的部分要明天 0:00 才生效，今天仍按 $today 分钟。"
-                else -> "今天只能改得更严：调低立刻生效，调高、移除要等明天 0:00。"
+                looser -> "放宽守护方式要明天 0:00 才生效，今天先按原来的。"
+                n < today -> "调低会马上生效，今天就按 $n 分钟。"
+                else -> "今天只能改得更严：更严的立刻生效，放宽、移除要等明天 0:00。"
             }
-            Text(
-                note, fontSize = 13.sp, color = Color(0xFF5E7A66), lineHeight = 21.sp,
-                modifier = Modifier.padding(top = 18.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF4F8F2)).padding(horizontal = 14.dp, vertical = 12.dp)
-            )
+            Note(note, warm = looser || n > today)
             Spacer(Modifier.height(18.dp))
             PrimaryButton("保存") {
                 val d = Store.desired(c).toMutableMap(); d[pkg] = n
-                Store.setDesired(c, d); Widgets.updateAll(c); onClose()
+                Store.setDesired(c, d); Store.setExtra(c, pkg, x); Widgets.updateAll(c); onClose()
             }
             Text(
                 "不再守护它（明天生效）", color = C.Soft, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable {
                     val d = Store.desired(c).toMutableMap(); d.remove(pkg)
-                    Store.setDesired(c, d); Widgets.updateAll(c); onClose()
+                    Store.setDesired(c, d); Store.setExtra(c, pkg, null); Widgets.updateAll(c); onClose()
                 }.padding(horizontal = 16.dp, vertical = 12.dp)
             )
         }
@@ -446,7 +457,7 @@ fun Setup(apps: List<AppInfo>, onBack: () -> Unit, onDone: () -> Unit) {
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 22.dp)) {
         Text("‹ 返回", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
         Text("每天给它们多久？", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text("保存后立刻生效。之后今天只能调低，调高要等明天。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
+        Text("保存后立刻生效。之后点首页的应用，可以改成限定时段、单次限时、打开前停一下等方式。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
         LazyColumn(Modifier.weight(1f).padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(apps, key = { it.pkg }) { a ->
                 SoftCard(Modifier.fillMaxWidth()) {

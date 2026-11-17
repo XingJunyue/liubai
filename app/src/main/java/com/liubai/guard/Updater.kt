@@ -31,23 +31,60 @@ data class Release(val code: Int, val name: String, val notes: String, val url: 
 object Updater {
     const val REPO = "XingJunyue/liubai"
 
+    /** 直连优先，失败再走国内加速镜像（只代理 github.com 的下载链接）。 */
+    val MIRRORS = listOf("", "https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
+    @Volatile var lastError = ""
+    @Volatile private var mirror = ""
+
+    private fun open(url: String, timeout: Int = 8_000): HttpURLConnection {
+        val con = URL(url).openConnection() as HttpURLConnection
+        con.connectTimeout = timeout; con.readTimeout = timeout
+        con.setRequestProperty("User-Agent", "liubai")
+        return con
+    }
+
     fun latest(): Release? {
-        val con = URL("https://api.github.com/repos/$REPO/releases/latest").openConnection() as HttpURLConnection
-        con.setRequestProperty("Accept", "application/vnd.github+json")
-        con.connectTimeout = 10_000; con.readTimeout = 10_000
-        if (con.responseCode != 200) return null
-        val j = JSONObject(con.inputStream.bufferedReader().readText())
-        val code = j.optString("tag_name").substringAfterLast('-').toIntOrNull() ?: return null
-        val assets = j.optJSONArray("assets") ?: return null
-        for (i in 0 until assets.length()) {
-            val a = assets.getJSONObject(i)
-            if (a.optString("name").endsWith(".apk"))
-                return Release(code, j.optString("name"), j.optString("body"), a.getString("browser_download_url"))
+        lastError = ""
+        // 1) GitHub API（有更新说明）
+        try {
+            val con = open("https://api.github.com/repos/$REPO/releases/latest")
+            con.setRequestProperty("Accept", "application/vnd.github+json")
+            val rc = con.responseCode
+            if (rc == 404) { lastError = "private"; return null }
+            if (rc == 200) {
+                val j = JSONObject(con.inputStream.bufferedReader().readText())
+                val code = j.optString("tag_name").substringAfterLast('-').toIntOrNull()
+                if (code != null) { mirror = ""; return Release(code, j.optString("name"), j.optString("body"), apk(code)) }
+            }
+        } catch (x: Exception) {}
+        // 2) 通过镜像读 releases/latest 的跳转，拿到最新 tag
+        for (m in MIRRORS) {
+            try {
+                val con = open(m + "https://github.com/$REPO/releases/latest")
+                con.instanceFollowRedirects = false
+                val rc = con.responseCode
+                val loc = con.getHeaderField("Location") ?: ""
+                val code = Regex("build-(\\d+)").find(loc)?.groupValues?.get(1)?.toIntOrNull()
+                if (rc in 300..399 && code != null) { mirror = m; return Release(code, "留白 1.$code", "", apk(code)) }
+                if (rc == 404) lastError = "private"
+            } catch (x: Exception) {}
         }
+        if (lastError.isEmpty()) lastError = "network"
         return null
     }
 
+    private fun apk(code: Int) = "https://github.com/$REPO/releases/download/build-$code/liubai-1.$code.apk"
+
     fun download(c: Context, url: String, progress: (Float) -> Unit): File {
+        val order = listOf(mirror) + MIRRORS.filter { it != mirror }
+        var last: Exception? = null
+        for (m in order) {
+            try { return fetch(c, m + url, progress) } catch (x: Exception) { last = x }
+        }
+        throw last ?: Exception("download failed")
+    }
+
+    private fun fetch(c: Context, url: String, progress: (Float) -> Unit): File {
         val dir = File(c.filesDir, "update").apply { mkdirs() }
         val f = File(dir, "liubai.apk")
         var u = URL(url)
@@ -56,11 +93,13 @@ object Updater {
         while (true) {
             con = u.openConnection() as HttpURLConnection
             con.instanceFollowRedirects = false
-            con.connectTimeout = 15_000; con.readTimeout = 30_000
+            con.connectTimeout = 10_000; con.readTimeout = 20_000
+            con.setRequestProperty("User-Agent", "liubai")
             val rc = con.responseCode
             if (rc in 300..399 && hops++ < 5) { u = URL(u, con.getHeaderField("Location")); continue }
             break
         }
+        if (con.responseCode != 200) throw Exception("http ${con.responseCode}")
         val len = con.contentLengthLong
         con.inputStream.use { inp ->
             f.outputStream().use { out ->
@@ -131,7 +170,7 @@ fun AboutScreen() {
             when (state) {
                 "checking" -> Text("正在看看有没有新版本…", fontSize = 14.sp, color = C.Soft)
                 "latest" -> Text("已经是最新版本啦", fontSize = 14.sp, color = C.SageInk)
-                "error" -> Text("暂时连不上 GitHub，稍后再试试", fontSize = 14.sp, color = C.ClayDeep)
+                "error" -> Text(if (Updater.lastError == "private") "仓库还没公开，暂时拿不到新版本" else "直连和镜像都没连上，换个网络再试试", fontSize = 14.sp, color = C.ClayDeep, lineHeight = 20.sp)
                 "noperm" -> Text("请允许留白「安装未知应用」，回来再点一次更新", fontSize = 14.sp, color = C.ClayDeep, lineHeight = 20.sp)
                 "found", "downloading", "ready" -> if (r != null) {
                     Text("发现新版本 ${r.name}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
@@ -151,7 +190,7 @@ fun AboutScreen() {
                 else -> PrimaryButton("检查更新") { check() }
             }
         }
-        Text("新版本从 GitHub 上的 ${Updater.REPO} 下载，安装时守护设置都会保留。",
+        Text("新版本从 GitHub 上的 ${Updater.REPO} 下载，连不上时自动走国内加速镜像。安装时守护设置都会保留。",
             fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(vertical = 18.dp))
     }
 }
