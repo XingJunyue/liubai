@@ -8,7 +8,9 @@ import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -140,7 +142,8 @@ fun AboutScreen() {
         }
     }
     fun get() {
-        val r = rel ?: return
+        val r = rel
+    if (r != null) {
         if (!Updater.canInstall(c)) {
             state = "noperm"
             c.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -191,4 +194,63 @@ fun AboutScreen() {
             }
         }
     }
+}
+
+/** 打开留白时自动查一次，有新版本就弹窗；可以「以后再说」，3 小时内不再打扰。 */
+@Composable
+fun UpdatePrompt() {
+    val c = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pr = remember { c.getSharedPreferences("upd", Context.MODE_PRIVATE) }
+    var rel by remember { mutableStateOf<Release?>(null) }
+    var state by remember { mutableStateOf("ask") } // ask downloading error noperm
+    var prog by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        if (System.currentTimeMillis() - pr.getLong("later", 0L) < 3 * 3600_000L) return@LaunchedEffect
+        val r = withContext(Dispatchers.IO) { try { Updater.latest() } catch (x: Exception) { null } }
+        if (r != null && r.code > BuildConfig.VERSION_CODE) rel = r
+    }
+    val r = rel ?: return
+    fun later() { pr.edit().putLong("later", System.currentTimeMillis()).apply(); rel = null }
+    fun go() {
+        if (!Updater.canInstall(c)) {
+            state = "noperm"
+            c.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        }
+        state = "downloading"; prog = 0f
+        scope.launch {
+            val f = withContext(Dispatchers.IO) { try { Updater.download(c, r.url) { p -> prog = p } } catch (x: Exception) { null } }
+            if (f == null) state = "error" else { Updater.install(c, f); rel = null }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = { if (state != "downloading") later() },
+        containerColor = C.Card,
+        title = { Text("发现新版本 ${r.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink) },
+        text = {
+            Column {
+                when (state) {
+                    "downloading" -> {
+                        Text("下载中 ${(prog * 100).toInt()}%", fontSize = 14.sp, color = C.Soft)
+                        LinearProgressIndicator(progress = prog, color = C.Clay, trackColor = C.Track,
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(8.dp))
+                    }
+                    "error" -> Text("下载没成功，换个网络再试试", fontSize = 14.sp, color = C.ClayDeep)
+                    "noperm" -> Text("请允许留白「安装未知应用」，回来再点更新", fontSize = 14.sp, color = C.ClayDeep)
+                    else -> Text(if (r.notes.isNotBlank()) r.notes else "守护设置更新后都会保留。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp)
+                }
+            }
+        },
+        confirmButton = {
+            if (state != "downloading") TextButton(onClick = { go() }) {
+                Text(if (state == "error") "重试" else "更新", color = C.Clay, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            if (state != "downloading") TextButton(onClick = { later() }) { Text("以后再说", color = C.Soft) }
+        }
+    )
+}
 }

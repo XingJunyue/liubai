@@ -64,6 +64,7 @@ fun App() {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
+    if (screen != "setup" && screen != "picker") UpdatePrompt()
     BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
