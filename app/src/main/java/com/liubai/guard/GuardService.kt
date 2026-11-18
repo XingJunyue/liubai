@@ -455,6 +455,15 @@ class GuardService : AccessibilityService() {
         h.postDelayed(dialogCheck, 400)
     }
 
+    /** 把窗口里的字串起来（只用来判断和记录）。 */
+    private fun dump(n: android.view.accessibility.AccessibilityNodeInfo?, sb: StringBuilder = StringBuilder(), depth: Int = 0): String {
+        if (n == null || depth > 25 || sb.length > 400) return sb.toString()
+        n.text?.let { if (it.isNotBlank()) sb.append(it).append(' ') }
+        n.contentDescription?.let { if (it.isNotBlank() && it != n.text) sb.append(it).append(' ') }
+        for (i in 0 until n.childCount) dump(try { n.getChild(i) } catch (x: Exception) { null }, sb, depth + 1)
+        return sb.toString()
+    }
+
     /** 有守护在跑，或者开着卸载锁：都要挡卸载（连点 10 次放行期间除外）。 */
     private fun locked() = (Store.protectActive(this) || Admin.on(this)) && !Unlock.open(this)
 
@@ -475,7 +484,14 @@ class GuardService : AccessibilityService() {
             if (!hasText(root, label)) continue
             if (adminAdd(root)) continue
             if (CANCEL.none { hasText(root, it) }) {
-                if (DANGER.any { hasText(root, it) }) Diag.log("看到含「留白」和危险字的窗口 ${root.packageName}，但没找到取消")
+                if (DANGER.any { hasText(root, it) } || hasText(root, "删除")) {
+                    val pk = root.packageName?.toString() ?: ""
+                    val txt = dump(root)
+                    Diag.log("看到含「留白」和危险字的窗口 $pk：${txt.take(160)}")
+                    // 小米的卸载确认是安全中心弹的，按钮不叫「取消」；只要不是应用信息页本身，就当卸载框挡掉
+                    val infoPage = "应用信息" in txt || "权限管理" in txt || "存储占用" in txt || "流量使用" in txt
+                    if (pk != homePkg && "launcher" !in pk && !infoPage) { bounce(); h.postDelayed({ performGlobalAction(GLOBAL_ACTION_BACK) }, 350); return }
+                }
                 continue
             }
             if (DANGER.any { hasText(root, it) } || hasText(root, "删除")) { bounce(); return }
