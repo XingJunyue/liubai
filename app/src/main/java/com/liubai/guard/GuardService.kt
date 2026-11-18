@@ -38,6 +38,8 @@ class GuardService : AccessibilityService() {
         // 只拦真正会关掉守护的按钮；页面本身随便看
         private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "取消激活", "Uninstall", "Force stop", "Clear data", "Disable", "Deactivate")
         private val CANCEL = listOf("取消", "Cancel")
+        // 桌面长按菜单里一定会有的系统项：和留白的快捷方式同时出现才算长按了留白
+        private val MENU = listOf("卸载", "应用信息", "分享", "编辑", "移除", "删除", "App info", "Uninstall")
     }
 
     private val h = Handler(Looper.getMainLooper())
@@ -501,7 +503,7 @@ class GuardService : AccessibilityService() {
             try { root.refresh() } catch (x: Exception) {}
             if (launcher) {
                 // 桌面长按留白图标时，弹出的菜单里会有留白自己的快捷方式：看到它就说明正对着留白，菜单和拖去卸载都挡掉
-                if (hasText(root, mark)) { Diag.log("桌面弹出了留白的长按菜单，挡回去"); bounce(); return }
+                if (hasText(root, mark) && MENU.any { hasText(root, it) }) { Diag.log("桌面弹出了留白的长按菜单，挡回去：${dump(root).take(160)}"); bounce(); return }
                 // 桌面自己弹的确认框：「卸载“留白”？」这类一句话里同时有名字和危险字
                 if (sameNode(root, label)) { Diag.log("桌面卸载确认框，挡回去：${dump(root).take(160)}"); bounce(); return }
                 if (now - lastHomeDump > 3000 && (hasText(root, "卸载") || hasText(root, "应用信息") || hasText(root, label))) {
@@ -511,6 +513,8 @@ class GuardService : AccessibilityService() {
                 if (false) { lastHomeDump = now; Diag.log("桌面出现卸载字样：${dump(root).take(300)}") }
                 continue
             }
+            // 只看系统的设置 / 安全中心 / 安装器 / 应用商店；聊天、浏览器里出现这些字不算
+            if (!sensitive(pk) && "market" !in pk && "appstore" !in pk) continue
             if (!hasText(root, label)) continue
             if (adminAdd(root)) continue
             val danger = DANGER.any { hasText(root, it) } || hasText(root, "删除") || hasText(root, "移除")
