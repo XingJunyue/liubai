@@ -97,7 +97,7 @@ class GuardService : AccessibilityService() {
     /** 只有停在桌面 / 设置 / 安装器时才监听「界面内容变化」（用来抓卸载确认框），刷视频时不监听，省电。 */
     private fun watchContent(pkg: String?) {
         // 桌面不监听（桌面的时钟、动画会不停触发，最耗电）；桌面的卸载靠「点击」事件就能挡住
-        val want = pkg != null && sensitive(pkg) && pkg != homePkg && "launcher" !in pkg && Store.protectActive(this)
+        val want = pkg != null && sensitive(pkg) && pkg != homePkg && "launcher" !in pkg && locked()
         if (want == contentOn) return
         contentOn = want
         try {
@@ -194,6 +194,8 @@ class GuardService : AccessibilityService() {
                 armLauncher(); guardDialog()
             }
         }
+        // 卸载锁开着：任何应用的窗口一变就扫一眼（窗口变化不频繁，耗电很少）
+        if ((st || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) && evPkg != packageName && locked()) guardDialog()
         if (evPkg != null && (sensitive(evPkg) || evPkg == homePkg)) {
             if (e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
                 Diag.log("事件 ${AccessibilityEvent.eventTypeToString(e.eventType).removePrefix("TYPE_")} $evPkg ${e.className ?: ""} 「${(e.text.joinToString(" ") + " " + (e.contentDescription ?: "")).trim().take(40)}」")
@@ -469,7 +471,7 @@ class GuardService : AccessibilityService() {
 
     /** 「激活卸载锁」的系统页面：上面也有「卸载」「取消」字样，但这是在加锁，不能挡。 */
     private fun adminAdd(root: android.view.accessibility.AccessibilityNodeInfo) =
-        !Admin.on(this) && (hasText(root, "激活此") || hasText(root, "Activate this") || hasText(root, "启用此设备管理"))
+        !Admin.on(this) && (hasText(root, "激活此") || hasText(root, "Activate this") || hasText(root, "启用此设备管理") || hasText(root, "设备管理应用") || hasText(root, "安全服务"))
 
     /** 弹出的确认框（卸载留白？停用留白？）：直接取消。 */
     private fun guardDialog() {
@@ -480,21 +482,25 @@ class GuardService : AccessibilityService() {
         val roots = (try { windows.mapNotNull { it.root } } catch (x: Exception) { emptyList() }) +
             listOfNotNull(try { rootInActiveWindow } catch (x: Exception) { null })
         val label = getString(R.string.app_name)
+        val mark = getString(R.string.sc_focus)
         for (root in roots) {
-            if (!hasText(root, label)) continue
-            if (adminAdd(root)) continue
-            if (CANCEL.none { hasText(root, it) }) {
-                if (DANGER.any { hasText(root, it) } || hasText(root, "删除")) {
-                    val pk = root.packageName?.toString() ?: ""
-                    val txt = dump(root)
-                    Diag.log("看到含「留白」和危险字的窗口 $pk：${txt.take(160)}")
-                    // 小米的卸载确认是安全中心弹的，按钮不叫「取消」；只要不是应用信息页本身，就当卸载框挡掉
-                    val infoPage = "应用信息" in txt || "权限管理" in txt || "存储占用" in txt || "流量使用" in txt
-                    if (pk != homePkg && "launcher" !in pk && !infoPage) { bounce(); h.postDelayed({ performGlobalAction(GLOBAL_ACTION_BACK) }, 350); return }
-                }
+            val pk = root.packageName?.toString() ?: continue
+            if (pk == packageName || pk in IGNORE || "inputmethod" in pk || "keyboard" in pk) continue
+            val launcher = pk == homePkg || "launcher" in pk || pk == "com.miui.home"
+            if (launcher) {
+                // 桌面长按留白图标时，弹出的菜单里会有留白自己的快捷方式：看到它就说明正对着留白，菜单和拖去卸载都挡掉
+                if (hasText(root, mark)) { Diag.log("桌面弹出了留白的长按菜单，挡回去"); bounce(); return }
                 continue
             }
-            if (DANGER.any { hasText(root, it) } || hasText(root, "删除")) { bounce(); return }
+            if (!hasText(root, label)) continue
+            if (adminAdd(root)) continue
+            val danger = DANGER.any { hasText(root, it) } || hasText(root, "删除") || hasText(root, "移除")
+            if (!danger) continue
+            // 任何别的应用里（安全中心、设置、应用商店、安装器……）同时出现「留白」和卸载 / 停用 / 清除等字样：一律挡
+            Diag.log("挡住 $pk：${dump(root).take(160)}")
+            bounce()
+            h.postDelayed({ lastScan = 0L; lastGuard = 0L; guardDialog() }, 900)   // 一次没关掉就再来一次
+            return
         }
     }
 }

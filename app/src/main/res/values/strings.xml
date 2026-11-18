@@ -7,4 +7,5 @@
     <string name="w_icons2">两排图标，外圈是今天的用量</string>
     <string name="w_list">每个应用今天的进度</string>
     <string name="admin_desc">卸载锁：守护生效期间不能直接卸载留白，想卸载时在留白里连点 10 次「确定」即可解开。</string>
+    <string name="sc_focus">留白 · 专注一下</string>
 </resources>
