@@ -54,7 +54,24 @@ object Focus {
     fun endAt(c: Context) = p(c).getLong("end", 0L)
     fun pausedLeft(c: Context) = p(c).getLong("paused", -1L)
     fun running(c: Context) = phase(c) != IDLE && pausedLeft(c) < 0
-    fun round(c: Context) = p(c).getInt("round", 0)            // 本轮已完成的专注数（0..3）
+    fun round(c: Context) = p(c).getInt("round", 0)            // 旧版：本轮已完成的专注数
+
+    // ---------- 自定义流程：专注和休息的顺序 + 循环次数 ----------
+    const val DEFAULT_SEQ = "12121213"
+    /** 顺序，比如 [专注, 短休, 专注, 长休]。 */
+    fun seq(c: Context): List<Int> = (p(c).getString("seq", DEFAULT_SEQ) ?: DEFAULT_SEQ).mapNotNull { it.digitToIntOrNull() }.filter { it in 1..3 }.ifEmpty { listOf(WORK) }
+    fun setSeq(c: Context, l: List<Int>) {
+        val v = l.filter { it in 1..3 }.ifEmpty { listOf(WORK) }
+        p(c).edit().putString("seq", v.joinToString("")).putInt("pos", 0).putInt("loop", 0)
+            .apply { if (phase(c) == IDLE) putInt("next", v[0]) }.apply()
+    }
+    /** 流程走到第几段（下一段 / 正在进行的那段）。 */
+    fun pos(c: Context) = p(c).getInt("pos", 0).let { if (it in seq(c).indices) it else 0 }
+    /** 整个流程已经完整走完几遍。 */
+    fun loop(c: Context) = p(c).getInt("loop", 0)
+    /** 循环几遍后停下；0 = 一直循环。 */
+    fun loops(c: Context) = p(c).getInt("loops", 0)
+    fun setLoops(c: Context, n: Int) = p(c).edit().putInt("loops", n.coerceAtLeast(0)).apply()
     fun next(c: Context) = p(c).getInt("next", WORK)            // 空闲时建议的下一段
     fun len(c: Context, ph: Int) = when (ph) { SHORT -> p(c).getInt("ls", 5); LONG -> p(c).getInt("ll", 15); else -> p(c).getInt("lw", 25) }
     fun setLen(c: Context, ph: Int, m: Int) = p(c).edit().putInt(when (ph) { SHORT -> "ls"; LONG -> "ll"; else -> "lw" }, m).apply()
@@ -121,24 +138,30 @@ object Focus {
     }
     fun stop(c: Context) {
         if (phase(c) == WORK) addFocused(c, totalMs(c) - leftMs(c))
-        p(c).edit().putInt("phase", IDLE).putLong("paused", -1L).apply() }
+        p(c).edit().putInt("phase", IDLE).putLong("paused", -1L).putInt("pos", 0).putInt("loop", 0).putInt("next", seq(c)[0]).apply() }
     fun skip(c: Context) { finish(c, counted = false) }
     fun choose(c: Context, ph: Int) { if (phase(c) == IDLE) p(c).edit().putInt("next", ph).apply() }
 
     private fun finish(c: Context, counted: Boolean) {
         val ph = phase(c)
         val e = p(c).edit()
-        var nx = WORK
         if (ph == WORK) {
-            var r = round(c)
             addFocused(c, if (counted) totalMs(c) else totalMs(c) - leftMs(c))
             if (counted) { dayFix(c); e.putInt("cnt", p(c).getInt("cnt", 0) + 1) }
-            r += 1
-            nx = if (r >= 4) LONG else SHORT
-            e.putInt("round", if (r >= 4) 0 else r)
         }
-        e.putInt("phase", IDLE).putInt("next", nx).putLong("paused", -1L).apply()
-        if (autoNext(c)) start(c, nx)
+        // 按自定义流程走到下一段；手动选的另一种阶段不推进流程
+        val sq = seq(c)
+        var ps = pos(c)
+        var lp = loop(c)
+        var allDone = false
+        if (sq[ps] == ph) {
+            ps += 1
+            if (ps >= sq.size) { ps = 0; lp += 1; if (loops(c) in 1..lp) { allDone = true; lp = 0 } }
+        }
+        val nx = sq[ps]
+        e.putInt("phase", IDLE).putInt("next", nx).putInt("pos", ps).putInt("loop", lp).putLong("paused", -1L).apply()
+        if (allDone) p(c).edit().putBoolean("allDone", true).apply()
+        if (autoNext(c) && !allDone) start(c, nx)
     }
 
     /** 守护服务和界面都会调用：到点就收尾并提醒。 */
@@ -149,10 +172,12 @@ object Focus {
         val ph = phase(c)
         finish(c, counted = true)
         Noise.sync(c)
-        notifyDone(c, ph)
+        val all = p(c).getBoolean("allDone", false)
+        if (all) p(c).edit().putBoolean("allDone", false).apply()
+        notifyDone(c, ph, all)
     }
 
-    private fun notifyDone(c: Context, ph: Int) {
+    private fun notifyDone(c: Context, ph: Int, all: Boolean = false) {
         try {
             val v = c.getSystemService(Vibrator::class.java)
             v?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 120, 120, 120), -1))
@@ -163,7 +188,11 @@ object Focus {
         nm.createNotificationChannel(NotificationChannel("focus", "番茄钟", NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(c, 7, Intent(c, MainActivity::class.java).putExtra("open", "focus")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE)
-        val (t, s) = if (ph == WORK) "专注完成" to "起来走走，喝口水。" else "休息结束" to "准备好了，就开始下一个番茄。"
+        val (t, s) = when {
+            all -> "这一组都完成了" to "辛苦了，好好休息一下。"
+            ph == WORK -> "专注完成" to "起来走走，喝口水。"
+            else -> "休息结束" to "准备好了，就开始下一个番茄。"
+        }
         nm.notify(77, NotificationCompat.Builder(c, "focus").setSmallIcon(R.drawable.ic_mono)
             .setContentTitle(t).setContentText(s).setAutoCancel(true).setContentIntent(pi).build())
     }
@@ -272,18 +301,13 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             }
         }
 
-        // 本轮四个番茄
-        val r = remember(tick) { Focus.round(c) }
-        Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            repeat(4) { i ->
-                val doneDot = i < r
-                val cur = i == r && phase == Focus.WORK
-                Box(
-                    Modifier.size(if (cur) 10.dp else 8.dp).clip(CircleShape)
-                        .background(if (doneDot) C.Clay else if (cur) C.ClayPale else C.Track)
-                )
-            }
-        }
+        // 流程进度：每一段一个点，专注大、休息小
+        val sq = remember(tick) { Focus.seq(c) }
+        val ps = remember(tick) { Focus.pos(c) }
+        val lps = remember(tick) { Focus.loops(c) }
+        val lp = remember(tick) { Focus.loop(c) }
+        FlowRowDots(sq, ps, phase != Focus.IDLE)
+        if (lps > 0) Text("第 ${lp + 1} / $lps 遍", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
 
         // 主按钮 + 两个轻按钮
         Row(Modifier.padding(top = 30.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -415,6 +439,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             SoftCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                 var lock by remember { mutableStateOf(Focus.lockApps(c)) }
                 var auto by remember { mutableStateOf(Focus.autoNext(c)) }
+                SeqEditor(enabled = phase == Focus.IDLE) { tick++ }
                 Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
                 Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
             }
@@ -583,5 +608,85 @@ fun NoiseScreen(onBack: () -> Unit) {
             Toggle("休息时也播放", "默认只在专注时播放", nb) { nb = it; Noise.setInBreak(c, it) }
         }
         Spacer(Modifier.height(32.dp))
+    }
+}
+
+
+@Composable
+private fun FlowRowDots(sq: List<Int>, pos: Int, live: Boolean) {
+    Row(Modifier.padding(top = 18.dp).padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        sq.take(16).forEachIndexed { i, ph ->
+            val done = i < pos
+            val cur = i == pos
+            val work = ph == Focus.WORK
+            val col = when {
+                done -> if (work) C.Clay else C.SageInk
+                cur -> if (work) C.ClayPale else Color(0xFFDDEBDF)
+                else -> C.Track
+            }
+            Box(
+                Modifier.size(if (work) (if (cur && live) 11.dp else 9.dp) else 6.dp).clip(CircleShape).background(col)
+                    .then(if (cur) Modifier.border(1.dp, if (work) C.Clay else C.SageInk, CircleShape) else Modifier)
+            )
+        }
+        if (sq.size > 16) Text("…", fontSize = 12.sp, color = C.Faint)
+    }
+}
+
+/** 设置里的流程编辑：点一段切换类型，× 删掉，＋ 加一段；下面是循环次数。 */
+@Composable
+private fun SeqEditor(enabled: Boolean, onChange: () -> Unit) {
+    val c = LocalContext.current
+    var sq by remember { mutableStateOf(Focus.seq(c)) }
+    var loops by remember { mutableStateOf(Focus.loops(c)) }
+    fun save(l: List<Int>) { sq = l; Focus.setSeq(c, l); onChange() }
+    Text("顺序", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+    Text(if (enabled) "点一段换成专注 / 短休 / 长休，点 × 删掉" else "专注或休息进行中，结束后再改",
+        fontSize = 12.sp, color = C.Faint, lineHeight = 17.sp)
+    // 简单的换行排布
+    val rows = sq.indices.chunked(4)
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        rows.forEach { idxs ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                idxs.forEach { i ->
+                    val ph = sq[i]
+                    val work = ph == Focus.WORK
+                    Row(
+                        Modifier.clip(RoundedCornerShape(12.dp)).background(if (work) C.ClayPale else Color(0xFFEAF3EC))
+                            .clickable(enabled = enabled) { save(sq.toMutableList().also { it[i] = if (ph == 3) 1 else ph + 1 }) }
+                            .padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(Focus.NAMES[ph]!!, fontSize = 13.sp, color = if (work) C.ClayDeep else C.SageInk, fontWeight = FontWeight.Medium)
+                        Text("×", fontSize = 14.sp, color = C.Faint, modifier = Modifier.clip(CircleShape)
+                            .clickable(enabled = enabled && sq.size > 1) { save(sq.toMutableList().also { it.removeAt(i) }) }
+                            .padding(horizontal = 6.dp))
+                    }
+                }
+            }
+        }
+    }
+    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("＋ 专注", fontSize = 13.sp, color = if (enabled) C.ClayDeep else C.Faint, modifier = Modifier.clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled && sq.size < 40) { save(sq + Focus.WORK) }.padding(vertical = 6.dp, horizontal = 4.dp))
+        Text("＋ 短休", fontSize = 13.sp, color = if (enabled) C.SageInk else C.Faint, modifier = Modifier.clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled && sq.size < 40) { save(sq + Focus.SHORT) }.padding(vertical = 6.dp, horizontal = 4.dp))
+        Text("＋ 长休", fontSize = 13.sp, color = if (enabled) C.SageInk else C.Faint, modifier = Modifier.clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled && sq.size < 40) { save(sq + Focus.LONG) }.padding(vertical = 6.dp, horizontal = 4.dp))
+        Spacer(Modifier.weight(1f))
+        Text("恢复默认", fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled) { save(Focus.DEFAULT_SEQ.map { it.digitToInt() }) }.padding(vertical = 6.dp, horizontal = 4.dp))
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("循环次数", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold)
+            Text("整组走完几遍后停下", fontSize = 12.sp, color = C.Faint)
+        }
+        Text("−", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape)
+            .clickable { if (loops > 0) { loops -= 1; Focus.setLoops(c, loops); onChange() } }.padding(horizontal = 14.dp, vertical = 4.dp))
+        Text(if (loops == 0) "不限" else "$loops 遍", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Clay,
+            modifier = Modifier.widthIn(min = 56.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("+", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape)
+            .clickable { loops += 1; Focus.setLoops(c, loops); onChange() }.padding(horizontal = 14.dp, vertical = 4.dp))
     }
 }
