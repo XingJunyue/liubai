@@ -388,6 +388,10 @@ fun KeepTip() {
 fun LockTip() {
     val c = LocalContext.current
     var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("lockTipHide", false)) }
+    // 系统规定：激活设备管理器的页面不能用「新任务」方式打开，否则会立刻自己关掉，所以这里用 ActivityResult 启动。
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
+        Diag.log("卸载锁授权返回：${Admin.on(c)}")
+    }
     if (hide) return
     SoftCard(Modifier.fillMaxWidth()) {
         Text("给留白加一把卸载锁", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
@@ -395,7 +399,10 @@ fun LockTip() {
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
         Spacer(Modifier.height(12.dp))
         PrimaryButton("开启卸载锁") {
-            try { c.startActivity(Admin.askIntent(c).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (x: Exception) {}
+            try { ask.launch(Admin.askIntent(c)) } catch (x: Exception) {
+                Diag.log("卸载锁打不开：${x.message}")
+                try { c.startActivity(Intent().setClassName("com.android.settings", "com.android.settings.DeviceAdminSettings").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (y: Exception) {}
+            }
         }
         Row(Modifier.padding(top = 8.dp)) {
             Spacer(Modifier.weight(1f))
