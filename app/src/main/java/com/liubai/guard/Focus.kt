@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -42,6 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import kotlinx.coroutines.delay
 
 /** 番茄钟：状态全在 SharedPreferences 里，关掉应用也照样走；守护服务负责到点提醒。 */
@@ -641,38 +648,11 @@ private fun SeqEditor(enabled: Boolean, onChange: () -> Unit) {
     var loops by remember { mutableStateOf(Focus.loops(c)) }
     fun save(l: List<Int>) { sq = l; Focus.setSeq(c, l); onChange() }
     Text("顺序", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-    Text(if (enabled) "点一段换成专注 / 短休 / 长休，点 × 删掉" else "专注或休息进行中，结束后再改",
+    Text(if (enabled) "把右边的拼块拖进左边的槽里，拖到哪就插在哪；槽里的拼块可以上下拖动换顺序，拖出槽就删掉，点一下换类型"
+        else "专注或休息进行中，结束后再改",
         fontSize = 12.sp, color = C.Faint, lineHeight = 17.sp)
-    // 简单的换行排布
-    val rows = sq.indices.chunked(4)
-    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        rows.forEach { idxs ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                idxs.forEach { i ->
-                    val ph = sq[i]
-                    val work = ph == Focus.WORK
-                    Row(
-                        Modifier.clip(RoundedCornerShape(12.dp)).background(if (work) C.ClayPale else Color(0xFFEAF3EC))
-                            .clickable(enabled = enabled) { save(sq.toMutableList().also { it[i] = if (ph == 3) 1 else ph + 1 }) }
-                            .padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(Focus.NAMES[ph]!!, fontSize = 13.sp, color = if (work) C.ClayDeep else C.SageInk, fontWeight = FontWeight.Medium)
-                        Text("×", fontSize = 14.sp, color = C.Faint, modifier = Modifier.clip(CircleShape)
-                            .clickable(enabled = enabled && sq.size > 1) { save(sq.toMutableList().also { it.removeAt(i) }) }
-                            .padding(horizontal = 6.dp))
-                    }
-                }
-            }
-        }
-    }
-    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("＋ 专注", fontSize = 13.sp, color = if (enabled) C.ClayDeep else C.Faint, modifier = Modifier.clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled && sq.size < 40) { save(sq + Focus.WORK) }.padding(vertical = 6.dp, horizontal = 4.dp))
-        Text("＋ 短休", fontSize = 13.sp, color = if (enabled) C.SageInk else C.Faint, modifier = Modifier.clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled && sq.size < 40) { save(sq + Focus.SHORT) }.padding(vertical = 6.dp, horizontal = 4.dp))
-        Text("＋ 长休", fontSize = 13.sp, color = if (enabled) C.SageInk else C.Faint, modifier = Modifier.clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled && sq.size < 40) { save(sq + Focus.LONG) }.padding(vertical = 6.dp, horizontal = 4.dp))
+    PuzzleBoard(sq, enabled) { save(it) }
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Spacer(Modifier.weight(1f))
         Text("恢复默认", fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp))
             .clickable(enabled = enabled) { save(Focus.DEFAULT_SEQ.map { it.digitToInt() }) }.padding(vertical = 6.dp, horizontal = 4.dp))
@@ -688,5 +668,153 @@ private fun SeqEditor(enabled: Boolean, onChange: () -> Unit) {
             modifier = Modifier.widthIn(min = 56.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Text("+", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape)
             .clickable { loops += 1; Focus.setLoops(c, loops); onChange() }.padding(horizontal = 14.dp, vertical = 4.dp))
+    }
+}
+
+
+// ---------------- 拖动拼图：编排专注和休息的顺序 ----------------
+
+private fun pieceColor(ph: Int) = when (ph) { Focus.WORK -> C.Clay; Focus.SHORT -> Color(0xFF8DB59A); else -> Color(0xFF5E8A6B) }
+
+/** 拼图块：上边一个凹口，下边一个凸起，一块块扣在一起。 */
+private class PuzzleShape(private val tab: Float) : androidx.compose.ui.graphics.Shape {
+    override fun createOutline(size: Size, layoutDirection: androidx.compose.ui.unit.LayoutDirection, density: androidx.compose.ui.unit.Density): androidx.compose.ui.graphics.Outline {
+        val r = tab
+        val h = size.height - r
+        val w = size.width
+        val cr = r * 0.9f
+        val p = androidx.compose.ui.graphics.Path().apply {
+            moveTo(cr, 0f)
+            lineTo(w / 2 - r, 0f)
+            arcTo(androidx.compose.ui.geometry.Rect(w / 2 - r, -r, w / 2 + r, r), 180f, -180f, false)   // 凹口
+            lineTo(w - cr, 0f)
+            quadraticBezierTo(w, 0f, w, cr)
+            lineTo(w, h - cr)
+            quadraticBezierTo(w, h, w - cr, h)
+            lineTo(w / 2 + r, h)
+            arcTo(androidx.compose.ui.geometry.Rect(w / 2 - r, h - r, w / 2 + r, h + r), 0f, 180f, false)  // 凸起
+            lineTo(cr, h)
+            quadraticBezierTo(0f, h, 0f, h - cr)
+            lineTo(0f, cr)
+            quadraticBezierTo(0f, 0f, cr, 0f)
+            close()
+        }
+        return androidx.compose.ui.graphics.Outline.Generic(p)
+    }
+}
+
+private data class PDrag(val ph: Int, val from: Int, val pos: Offset)
+
+@Composable
+private fun PuzzleBoard(sq: List<Int>, enabled: Boolean, onSave: (List<Int>) -> Unit) {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    val pitch = 46.dp          // 每块占的高度（凸起扣进下一块的凹口）
+    val tab = 9.dp
+    val pad = 12.dp
+    val pitchPx = with(d) { pitch.toPx() }
+    val padPx = with(d) { pad.toPx() }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var track by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    var drag by remember { mutableStateOf<PDrag?>(null) }
+    val pieceOrigin = remember { mutableStateMapOf<String, Offset>() }
+
+    fun restOf(g: PDrag?) = if (g != null && g.from >= 0) sq.filterIndexed { i, _ -> i != g.from } else sq
+    fun targetOf(g: PDrag?): Int? {
+        g ?: return null
+        val t = track
+        val inside = g.pos.x > t.left - 40f && g.pos.x < t.right + 40f && g.pos.y > t.top - 30f && g.pos.y < t.bottom + pitchPx
+        return if (!inside) null else ((g.pos.y - t.top - padPx) / pitchPx).toInt().coerceIn(0, restOf(g).size)
+    }
+    val rest = restOf(drag)
+    val target = targetOf(drag)
+    val slots = rest.size + (if (target != null) 1 else 0)
+    val trackH = pad * 2 + pitch * maxOf(slots, 3) + tab
+
+    fun drop() {
+        val g = drag ?: return
+        val t = targetOf(g)
+        val out = restOf(g).toMutableList()
+        drag = null
+        if (t != null) out.add(t, g.ph)
+        if (out.isEmpty()) return
+        if (out != sq) onSave(out)
+    }
+    fun Modifier.pieceDrag(key: String, ph: Int, from: Int) = this
+        .onGloballyPositioned { pieceOrigin[key] = it.positionInRoot() }
+        .pointerInput(enabled, ph, from, sq) {
+            if (!enabled) return@pointerInput
+            detectDragGestures(
+                onDragStart = { o -> drag = PDrag(ph, from, (pieceOrigin[key] ?: Offset.Zero) - origin + o) },
+                onDrag = { ch, amt -> ch.consume(); drag = drag?.let { it.copy(pos = it.pos + amt) } },
+                onDragEnd = { drop() },
+                onDragCancel = { drag = null }
+            )
+        }
+
+    Box(Modifier.fillMaxWidth().padding(top = 10.dp).onGloballyPositioned { origin = it.positionInRoot() }) {
+        Row(Modifier.fillMaxWidth()) {
+            // 左边：槽
+            Box(
+                Modifier.weight(1f).height(trackH).clip(RoundedCornerShape(18.dp))
+                    .background(if (target != null) C.ClayPale else C.Sand)
+                    .border(1.dp, if (target != null) C.Clay else C.Track, RoundedCornerShape(18.dp))
+                    .onGloballyPositioned { val p = it.positionInRoot() - origin; track = androidx.compose.ui.geometry.Rect(p, Size(it.size.width.toFloat(), it.size.height.toFloat())) }
+            ) {
+                if (rest.isEmpty() && target == null) Text("把拼块拖进来", fontSize = 13.sp, color = C.Faint, modifier = Modifier.align(Alignment.Center))
+                val tabPx = with(d) { tab.toPx() }
+                if (target != null) {
+                    val y by animateDpAsState(pad + pitch * target, label = "ph")
+                    Box(Modifier.padding(horizontal = 14.dp).offset(y = y).fillMaxWidth().height(pitch + tab)
+                        .clip(PuzzleShape(tabPx)).background(pieceColor(drag?.ph ?: 1).copy(alpha = 0.25f)))
+                }
+                // 每块按原始下标固定身份，拖动中的那块留在原处但隐藏，手势不会断
+                sq.forEachIndexed { orig, ph ->
+                    key(orig, sq.size) {
+                        val g = drag
+                        val hidden = g != null && g.from == orig
+                        val ri = if (g != null && g.from >= 0 && orig > g.from) orig - 1 else orig
+                        val slot = if (target != null && ri >= target) ri + 1 else ri
+                        val y by animateDpAsState(pad + pitch * slot, label = "p")
+                        Box(
+                            Modifier.padding(horizontal = 14.dp).offset(y = y).fillMaxWidth().height(pitch + tab)
+                                .alpha(if (hidden) 0f else 1f)
+                                .clip(PuzzleShape(tabPx)).background(pieceColor(ph))
+                                .pointerInput(enabled, orig, ph, sq) {
+                                    if (!enabled) return@pointerInput
+                                    detectTapGestures { onSave(sq.toMutableList().also { it[orig] = if (ph == 3) 1 else ph + 1 }) }
+                                }
+                                .pieceDrag("t$orig", ph, orig),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            Text("${slot + 1}. ${Focus.NAMES[ph]}", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 13.dp))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            // 右边：拼块仓库
+            Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                for (ph in listOf(Focus.WORK, Focus.SHORT, Focus.LONG)) {
+                    Box(
+                        Modifier.size(62.dp).clip(CircleShape).background(pieceColor(ph).copy(alpha = if (enabled) 1f else 0.4f))
+                            .pieceDrag("p$ph", ph, -1),
+                        contentAlignment = Alignment.Center
+                    ) { Text(Focus.NAMES[ph]!!, fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.SemiBold) }
+                }
+                Text("按住拖", fontSize = 11.sp, color = C.Faint)
+            }
+        }
+        // 手指下面跟着走的那块
+        drag?.let { g ->
+            val w = 96.dp; val h = pitch + tab
+            Box(
+                Modifier.offset(
+                    x = with(d) { (g.pos.x).toDp() } - w / 2,
+                    y = with(d) { (g.pos.y).toDp() } - h / 2
+                ).size(w, h).clip(PuzzleShape(with(d) { tab.toPx() })).background(pieceColor(g.ph).copy(alpha = 0.92f)),
+                contentAlignment = Alignment.TopCenter
+            ) { Text(Focus.NAMES[g.ph]!!, fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 13.dp)) }
+        }
     }
 }
