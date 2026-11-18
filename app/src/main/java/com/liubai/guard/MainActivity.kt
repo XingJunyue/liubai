@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
 fun App() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val openExtra = remember { (ctx as? android.app.Activity)?.intent?.getStringExtra("open") }
-    var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra ?: "home") }
+    var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra ?: if (Focus.phase(ctx) == Focus.WORK) "focus" else "home") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()

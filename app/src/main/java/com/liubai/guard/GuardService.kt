@@ -237,8 +237,14 @@ class GuardService : AccessibilityService() {
     private fun used(pkg: String): Long = Store.usedMs(this, pkg) + (if (pendPkg == pkg) pendMs else 0L)
 
     /** 现在该不该挡住它；返回原因，null 表示放行。 */
+    private var instCache: Set<String>? = null
+    private fun installers(): Set<String> = instCache ?: Updater.installerPkgs(this).also { instCache = it }
+    /** 正在更新留白：安装器和授权页一律放行，装完专注照常继续。 */
+    private fun updatePass(pkg: String) = Updater.updating(this) && (pkg in installers() || "packageinstaller" in pkg)
+
     private fun reason(pkg: String): String? {
         if (pkg == packageName) return null
+        if (updatePass(pkg)) return null
         if (Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
@@ -406,6 +412,7 @@ class GuardService : AccessibilityService() {
         try { root.findAccessibilityNodeInfosByText(w).isNotEmpty() } catch (x: Exception) { false }
 
     private fun bounce() {
+        if (fg?.let { updatePass(it) } == true) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastGuard < 800) return
         lastGuard = now

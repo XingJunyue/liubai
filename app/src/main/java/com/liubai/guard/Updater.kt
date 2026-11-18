@@ -170,7 +170,24 @@ object Updater {
 
     fun canInstall(c: Context) = Build.VERSION.SDK_INT < 26 || c.packageManager.canRequestPackageInstalls()
 
+    /** 更新窗口：从点更新到装完的这几分钟里，专注 / 无敌模式放行安装器和授权页。 */
+    fun arm(c: Context) = c.getSharedPreferences("upd", Context.MODE_PRIVATE).edit().putLong("until", System.currentTimeMillis() + 5 * 60_000L).apply()
+    fun updating(c: Context) = System.currentTimeMillis() < c.getSharedPreferences("upd", Context.MODE_PRIVATE).getLong("until", 0L)
+    /** 能装 apk 的应用（各品牌安装器）+ 授权「安装未知应用」的设置页。 */
+    fun installerPkgs(c: Context): Set<String> {
+        val s = mutableSetOf("com.android.packageinstaller", "com.google.android.packageinstaller", "com.miui.packageinstaller",
+            "com.samsung.android.packageinstaller", "com.android.settings", "com.miui.securitycenter", "com.miui.permcenter",
+            "com.android.permissioncontroller", "com.google.android.permissioncontroller")
+        try {
+            val i = Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://x/a.apk"), "application/vnd.android.package-archive")
+            c.packageManager.queryIntentActivities(i, 0).forEach { s += it.activityInfo.packageName }
+            c.packageManager.queryIntentActivities(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES), 0).forEach { s += it.activityInfo.packageName }
+        } catch (x: Exception) {}
+        return s
+    }
+
     fun install(c: Context, f: File) {
+        arm(c)
         val uri = FileProvider.getUriForFile(c, "${c.packageName}.files", f)
         c.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -200,6 +217,7 @@ fun AboutScreen() {
         val r = rel ?: return
         if (!Updater.canInstall(c)) {
             state = "noperm"
+            Updater.arm(c)
             c.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
@@ -297,6 +315,7 @@ fun UpdatePrompt() {
     fun go() {
         if (!Updater.canInstall(c)) {
             state = "noperm"
+            Updater.arm(c)
             c.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
