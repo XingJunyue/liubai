@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         Keep.heal(this)
         Keep.schedule(this)
-        Admin.tidy(this)
+        // 卸载锁一旦开启就一直锁着，只有连点 10 次才解开
         Widgets.updateAll(this)
     }
 }
