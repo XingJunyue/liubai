@@ -47,6 +47,7 @@ fun serviceOn(c: Context): Boolean {
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
+        Diag.init(this)
         super.onCreate(b)
         setContent { LiubaiTheme { App() } }
     }

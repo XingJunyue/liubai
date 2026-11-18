@@ -113,6 +113,7 @@ class GuardService : AccessibilityService() {
     fun homeNow() = homePkg
 
     override fun onServiceConnected() {
+        Diag.init(this)
         Diag.log("服务连上")
         running = true
         instance = this
@@ -186,6 +187,12 @@ class GuardService : AccessibilityService() {
                 if (hot() != wasHot) kick()
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
+            // 桌面弹出长按菜单 / 卸载框时只有「窗口变化」事件，没有包名：在桌面就盯一下
+            val f0 = fg
+            if (!st && f0 != null && (f0 == homePkg || "launcher" in f0) && locked()) {
+                Diag.log("桌面窗口变化 ${try { windows.joinToString(",") { "${it.root?.packageName}:${it.title ?: ""}" } } catch (x: Exception) { "?" }}")
+                armLauncher(); guardDialog()
+            }
         }
         if (evPkg != null && (sensitive(evPkg) || evPkg == homePkg)) {
             if (e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
@@ -195,6 +202,8 @@ class GuardService : AccessibilityService() {
                 val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
                 longSelf = getString(R.string.app_name) in said
                 longAt = SystemClock.elapsedRealtime()
+                // 卸载锁开着：长按留白的图标就直接挡回去（小米桌面的卸载不弹确认框，点了就没了，只能在长按这一步拦）
+                if (longSelf && (evPkg == homePkg || "launcher" in evPkg) && locked()) { Diag.log("长按了留白图标，挡回去"); bounce() }
             }
             // 桌面上任何点按 / 长按 / 拖动后的 20 秒都盯一下：有的桌面长按、点「卸载」都不报事件
             if ((evPkg == homePkg || "launcher" in evPkg) && e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&

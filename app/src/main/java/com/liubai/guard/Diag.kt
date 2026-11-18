@@ -11,8 +11,38 @@ object Diag {
     private val buf = ArrayDeque<String>()
     private val f = SimpleDateFormat("HH:mm:ss", Locale.US)
     @Synchronized fun log(s: String) {
-        buf.addLast("${f.format(Date())} $s")
+        val line = "${f.format(Date())} $s"
+        buf.addLast(line)
         while (buf.size > 80) buf.removeFirst()
+        persist(line)
+    }
+
+    // 同时写一份到「下载/留白」里：应用被卸载了，这份记录还在，方便查原因
+    @Volatile private var app: Context? = null
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var uri: android.net.Uri? = null
+    fun init(c: Context) { app = c.applicationContext }
+    private fun persist(line: String) {
+        val c = app ?: return
+        if (android.os.Build.VERSION.SDK_INT < 29) return
+        io.execute {
+            try {
+                val sp = c.getSharedPreferences("diag", Context.MODE_PRIVATE)
+                if (uri == null) uri = sp.getString("uri", null)?.let { android.net.Uri.parse(it) }
+                fun make(): android.net.Uri? {
+                    val v = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "留白记录.txt")
+                        put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, "Download/留白")
+                    }
+                    return c.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v)
+                        ?.also { sp.edit().putString("uri", it.toString()).apply() }
+                }
+                val bytes = (line + "\n").toByteArray()
+                try { c.contentResolver.openOutputStream(uri ?: make().also { uri = it }!!, "wa")!!.use { it.write(bytes) } }
+                catch (x: Exception) { uri = make(); uri?.let { u -> c.contentResolver.openOutputStream(u, "wa")?.use { it.write(bytes) } } }
+            } catch (x: Exception) {}
+        }
     }
     @Synchronized private fun lines() = buf.toList()
 
