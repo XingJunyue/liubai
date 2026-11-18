@@ -497,12 +497,18 @@ class GuardService : AccessibilityService() {
             val pk = root.packageName?.toString() ?: continue
             if (pk == packageName || pk in IGNORE || "inputmethod" in pk || "keyboard" in pk) continue
             val launcher = pk == homePkg || "launcher" in pk || pk == "com.miui.home"
+            // 系统会缓存窗口内容：不刷新就看不到刚弹出来的菜单
+            try { root.refresh() } catch (x: Exception) {}
             if (launcher) {
                 // 桌面长按留白图标时，弹出的菜单里会有留白自己的快捷方式：看到它就说明正对着留白，菜单和拖去卸载都挡掉
                 if (hasText(root, mark)) { Diag.log("桌面弹出了留白的长按菜单，挡回去"); bounce(); return }
                 // 桌面自己弹的确认框：「卸载“留白”？」这类一句话里同时有名字和危险字
                 if (sameNode(root, label)) { Diag.log("桌面卸载确认框，挡回去：${dump(root).take(160)}"); bounce(); return }
-                if (hasText(root, "卸载") && now - lastHomeDump > 3000) { lastHomeDump = now; Diag.log("桌面出现卸载字样：${dump(root).take(300)}") }
+                if (now - lastHomeDump > 3000 && (hasText(root, "卸载") || hasText(root, "应用信息") || hasText(root, label))) {
+                    if (hasText(root, label) && !hasText(root, "卸载") && !hasText(root, "应用信息")) {} else
+                    { lastHomeDump = now; Diag.log("桌面弹框内容：${dump(root).take(300)}") }
+                }
+                if (false) { lastHomeDump = now; Diag.log("桌面出现卸载字样：${dump(root).take(300)}") }
                 continue
             }
             if (!hasText(root, label)) continue
