@@ -90,8 +90,7 @@ fun App() {
                             Modifier.size(42.dp).clip(CircleShape).background(if (screen == "settings") C.ClayPale else C.Card).clickable { go("settings") },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(androidx.compose.material.icons.Icons.Outlined.Settings, contentDescription = "设置",
-                                tint = if (screen == "settings") C.ClayDeep else C.Ink, modifier = Modifier.size(22.dp))
+                            Gear(if (screen == "settings") C.ClayDeep else C.Ink)
                         }
                     }
                     DrawerItem("今天", screen == "home") { go("home") }
@@ -599,5 +598,27 @@ fun Setup(apps: List<AppInfo>, onBack: () -> Unit, onDone: () -> Unit) {
             Widgets.updateAll(c)
             onDone()
         }
+    }
+}
+
+
+/** 机械齿轮图标：8 个齿 + 中间的孔。 */
+@Composable
+fun Gear(color: Color, size: androidx.compose.ui.unit.Dp = 22.dp) {
+    androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        val cx = this.size.width / 2; val cy = this.size.height / 2
+        val rOut = this.size.minDimension * 0.48f
+        val rIn = this.size.minDimension * 0.36f
+        val teeth = 8
+        val path = androidx.compose.ui.graphics.Path()
+        for (i in 0 until teeth * 4) {
+            val a = Math.PI * 2 * i / (teeth * 4) - Math.PI / 2
+            val r = if ((i % 4) == 1 || (i % 4) == 2) rOut else rIn
+            val x = cx + (r * Math.cos(a)).toFloat(); val y = cy + (r * Math.sin(a)).toFloat()
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        path.close()
+        drawPath(path, color)
+        drawCircle(Color.White, radius = this.size.minDimension * 0.14f, center = androidx.compose.ui.geometry.Offset(cx, cy))
     }
 }
