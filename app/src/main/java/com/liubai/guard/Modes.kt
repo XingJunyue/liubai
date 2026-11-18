@@ -66,6 +66,30 @@ fun StepSlider(label: String, value: Int, range: IntRange, step: Int, unit: Stri
     )
 }
 
+/** 自由时长：点数字直接输入任意分钟数（至少 1），两边的 −/+ 每次加减 1；不设上限。 */
+@Composable
+fun FreeMinutes(label: String, value: Int, onChange: (Int) -> Unit) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text("−", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { if (value > 1) onChange(value - 1) }.padding(horizontal = 14.dp, vertical = 4.dp))
+        BasicTextField(
+            value = text,
+            onValueChange = { t ->
+                val d = t.filter { it.isDigit() }.take(6)
+                text = d
+                d.toIntOrNull()?.let { if (it >= 1) onChange(it) }
+            },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Clay, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+            modifier = Modifier.width(76.dp).clip(RoundedCornerShape(12.dp)).background(C.ClayPale).padding(vertical = 6.dp)
+        )
+        Text("+", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { onChange(value + 1) }.padding(horizontal = 14.dp, vertical = 4.dp))
+        Text("分钟", fontSize = 13.sp, color = C.Soft)
+    }
+}
+
 @Composable
 fun Note(t: String, warm: Boolean = false) {
     Text(

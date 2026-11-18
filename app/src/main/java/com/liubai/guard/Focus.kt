@@ -407,9 +407,9 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 var ll by remember { mutableStateOf(Focus.len(c, Focus.LONG)) }
                 var lock by remember { mutableStateOf(Focus.lockApps(c)) }
                 var auto by remember { mutableStateOf(Focus.autoNext(c)) }
-                StepSlider("专注", lw, 10..90, 5, "分钟") { lw = it; Focus.setLen(c, Focus.WORK, it); tick++ }
-                StepSlider("短休", ls, 3..20, 1, "分钟") { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
-                StepSlider("长休", ll, 10..40, 5, "分钟") { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
+                FreeMinutes("专注", lw) { lw = it; Focus.setLen(c, Focus.WORK, it); tick++ }
+                FreeMinutes("短休", ls) { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
+                FreeMinutes("长休", ll) { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
                 Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
                 Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
             }
