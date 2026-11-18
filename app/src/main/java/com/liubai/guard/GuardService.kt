@@ -198,8 +198,8 @@ class GuardService : AccessibilityService() {
             }
             // 桌面上任何点按 / 长按 / 拖动后的 20 秒都盯一下：有的桌面长按、点「卸载」都不报事件
             if ((evPkg == homePkg || "launcher" in evPkg) && e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-                Store.protectActive(this) && !Unlock.open(this)) armLauncher()
-            if (Store.protectActive(this) && !Unlock.open(this)) {
+                locked()) armLauncher()
+            if (locked()) {
                 if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e)
                 else if (e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) laterDialog()
                 else if (e.eventType != AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) guardDialog()
@@ -408,7 +408,7 @@ class GuardService : AccessibilityService() {
             if (SystemClock.elapsedRealtime() > armUntil) return
             val f = fg
             if (f != null && f != homePkg && "launcher" !in f && !sensitive(f)) { armUntil = 0L; return }
-            if (Store.protectActive(this@GuardService) && !Unlock.open(this@GuardService)) { lastScan = 0L; guardDialog() }
+            if (locked()) { lastScan = 0L; guardDialog() }
             h.postDelayed(this, 500)
         }
     }
@@ -445,6 +445,9 @@ class GuardService : AccessibilityService() {
         dialogPending = true
         h.postDelayed(dialogCheck, 400)
     }
+
+    /** 有守护在跑，或者开着卸载锁：都要挡卸载（连点 10 次放行期间除外）。 */
+    private fun locked() = (Store.protectActive(this) || Admin.on(this)) && !Unlock.open(this)
 
     /** 「激活卸载锁」的系统页面：上面也有「卸载」「取消」字样，但这是在加锁，不能挡。 */
     private fun adminAdd(root: android.view.accessibility.AccessibilityNodeInfo) =
