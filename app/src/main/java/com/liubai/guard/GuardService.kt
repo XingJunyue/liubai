@@ -393,6 +393,7 @@ class GuardService : AccessibilityService() {
         val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
         val label = getString(R.string.app_name)
         if (!hasText(root, label)) return
+        if (adminAdd(root)) return
         val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
         if (danger || (isSwitch && hasText(root, "无障碍"))) bounce()
     }
@@ -445,6 +446,10 @@ class GuardService : AccessibilityService() {
         h.postDelayed(dialogCheck, 400)
     }
 
+    /** 「激活卸载锁」的系统页面：上面也有「卸载」「取消」字样，但这是在加锁，不能挡。 */
+    private fun adminAdd(root: android.view.accessibility.AccessibilityNodeInfo) =
+        !Admin.on(this) && (hasText(root, "激活此") || hasText(root, "Activate this") || hasText(root, "启用此设备管理"))
+
     /** 弹出的确认框（卸载留白？停用留白？）：直接取消。 */
     private fun guardDialog() {
         val now = SystemClock.elapsedRealtime()
@@ -456,6 +461,7 @@ class GuardService : AccessibilityService() {
         val label = getString(R.string.app_name)
         for (root in roots) {
             if (!hasText(root, label)) continue
+            if (adminAdd(root)) continue
             if (CANCEL.none { hasText(root, it) }) {
                 if (DANGER.any { hasText(root, it) }) Diag.log("看到含「留白」和危险字的窗口 ${root.packageName}，但没找到取消")
                 continue

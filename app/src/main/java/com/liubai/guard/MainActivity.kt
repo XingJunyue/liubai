@@ -75,16 +75,23 @@ fun App() {
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "widget"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "widget", "settings"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
-                    Row(Modifier.padding(start = 8.dp, top = 22.dp, bottom = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 22.dp, bottom = 22.dp), verticalAlignment = Alignment.CenterVertically) {
                         Sprout(44.dp)
                         Spacer(Modifier.width(10.dp))
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text("留白", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
                             Text("给生活留一点空白", fontSize = 12.sp, color = C.Faint)
+                        }
+                        Box(
+                            Modifier.size(42.dp).clip(CircleShape).background(if (screen == "settings") C.ClayPale else C.Card).clickable { go("settings") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(androidx.compose.material.icons.Icons.Outlined.Settings, contentDescription = "设置",
+                                tint = if (screen == "settings") C.ClayDeep else C.Ink, modifier = Modifier.size(22.dp))
                         }
                     }
                     DrawerItem("今天", screen == "home") { go("home") }
@@ -93,14 +100,6 @@ fun App() {
                     DrawerItem("每周小结", screen == "weekly") { go("weekly") }
                     DrawerItem("小部件", screen == "widget") { go("widget") }
                     Spacer(Modifier.weight(1f))
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("首页诗句", fontSize = 15.sp, color = C.Ink)
-                            Text("轮换温暖的诗词，点一下换一句", fontSize = 12.sp, color = C.Faint)
-                        }
-                        Switch(poemsOn, { poemsOn = it; Poems.setOn(ctx, it) },
-                            colors = SwitchDefaults.colors(checkedTrackColor = C.Clay, checkedThumbColor = androidx.compose.ui.graphics.Color.White, uncheckedTrackColor = C.Track, uncheckedBorderColor = C.Track))
-                    }
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint)
                         Text("检查更新", fontSize = 12.sp, color = C.ClayDeep,
@@ -128,6 +127,7 @@ fun App() {
                 "about" -> Paged(menu) { AboutScreen() }
                 "widget" -> Paged(menu) { Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) { WidgetScreen() } }
                 "guide" -> Paged(menu) { GuideScreen() }
+                "settings" -> Paged(menu) { SettingsScreen(poemsOn) { poemsOn = it; Poems.setOn(ctx, it) } }
                 "intro" -> Column(Modifier.fillMaxSize().systemBarsPadding().padding(top = 16.dp)) {
                     GuideScreen { Unlock.setGuided(ctx); screen = "home" }
                 }
@@ -207,15 +207,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
                 Spacer(Modifier.height(18.dp))
                 SetupGuide()
             }
-            if (on && !Keep.canHeal(c)) {
-                Spacer(Modifier.height(14.dp))
-                KeepTip()
-            }
-            val lockOn = remember(tick) { Admin.on(c) }
-            if (on && !lockOn && rows.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                LockTip()
-            }
+
 
             Spacer(Modifier.height(18.dp))
             SoftCard(Modifier.fillMaxWidth(), brush = Brush.linearGradient(listOf(Color(0xFFFFF4EA), Color(0xFFFDEBDD)))) {
@@ -332,9 +324,9 @@ fun UsageGuide() {
 
 /** 一次性的 adb 授权：之后无障碍被系统关掉，留白会自己重新打开。 */
 @Composable
-fun KeepTip() {
+fun KeepTip(force: Boolean = false) {
     val c = LocalContext.current
-    var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
+    var hide by remember { mutableStateOf(!force && c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
     var done by remember { mutableStateOf(Keep.canHeal(c) || WAdb.adbMode(c)) }
     var st by remember { mutableStateOf(WAdb.status) }
     if (!done) Every(1000) { st = WAdb.status; done = Keep.canHeal(c) || WAdb.adbMode(c) }
@@ -376,7 +368,7 @@ fun KeepTip() {
                     c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }.padding(vertical = 6.dp))
             Spacer(Modifier.weight(1f))
-            Text("知道了", color = C.Faint, fontSize = 14.sp,
+            if (!force) Text("知道了", color = C.Faint, fontSize = 14.sp,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
                     c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("keepTipHide", true).apply(); hide = true
                 }.padding(vertical = 6.dp, horizontal = 8.dp))
@@ -385,12 +377,12 @@ fun KeepTip() {
 }
 
 @Composable
-fun LockTip() {
+fun LockTip(force: Boolean = false, onResult: () -> Unit = {}) {
     val c = LocalContext.current
-    var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("lockTipHide", false)) }
+    var hide by remember { mutableStateOf(!force && c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("lockTipHide", false)) }
     // 系统规定：激活设备管理器的页面不能用「新任务」方式打开，否则会立刻自己关掉，所以这里用 ActivityResult 启动。
     val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) {
-        Diag.log("卸载锁授权返回：${Admin.on(c)}")
+        Diag.log("卸载锁授权返回：${Admin.on(c)}"); onResult()
     }
     if (hide) return
     SoftCard(Modifier.fillMaxWidth()) {
@@ -404,7 +396,7 @@ fun LockTip() {
                 try { c.startActivity(Intent().setClassName("com.android.settings", "com.android.settings.DeviceAdminSettings").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (y: Exception) {}
             }
         }
-        Row(Modifier.padding(top = 8.dp)) {
+        if (!force) Row(Modifier.padding(top = 8.dp)) {
             Spacer(Modifier.weight(1f))
             Text("以后再说", color = C.Faint, fontSize = 14.sp,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {

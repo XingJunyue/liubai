@@ -335,8 +335,19 @@ fun FocusScreen(onBack: () -> Unit = {}) {
 
         if (strict) Text("无敌模式下，这个番茄要做完才能停", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 12.dp))
 
-        // 无敌模式卡片
+        // 时长：直接放在主页，点数字就能改
         SoftCard(Modifier.fillMaxWidth().padding(top = 26.dp)) {
+            var lw by remember { mutableStateOf(Focus.len(c, Focus.WORK)) }
+            var ls by remember { mutableStateOf(Focus.len(c, Focus.SHORT)) }
+            var ll by remember { mutableStateOf(Focus.len(c, Focus.LONG)) }
+            Text("时长", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+            FreeMinutes("专注", lw) { lw = it; Focus.setLen(c, Focus.WORK, it); tick++ }
+            FreeMinutes("短休", ls) { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
+            FreeMinutes("长休", ll) { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
+        }
+
+        // 无敌模式卡片
+        SoftCard(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("无敌模式", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
@@ -402,14 +413,8 @@ fun FocusScreen(onBack: () -> Unit = {}) {
         )
         AnimatedVisibility(showSet) {
             SoftCard(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                var lw by remember { mutableStateOf(Focus.len(c, Focus.WORK)) }
-                var ls by remember { mutableStateOf(Focus.len(c, Focus.SHORT)) }
-                var ll by remember { mutableStateOf(Focus.len(c, Focus.LONG)) }
                 var lock by remember { mutableStateOf(Focus.lockApps(c)) }
                 var auto by remember { mutableStateOf(Focus.autoNext(c)) }
-                FreeMinutes("专注", lw) { lw = it; Focus.setLen(c, Focus.WORK, it); tick++ }
-                FreeMinutes("短休", ls) { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
-                FreeMinutes("长休", ll) { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
                 Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
                 Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
             }
