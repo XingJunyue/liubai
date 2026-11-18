@@ -202,7 +202,7 @@ object WAdb {
                 if (!m.isConnected && !m.connectTls(app, 4_000)) throw Exception("nopair")
                 grant(app, m)
             } catch (x: Throwable) { x.message ?: "nopair" }
-            when (msg) {
+            when (if ("pairing" in msg.lowercase() || "not paired" in msg.lowercase()) "nopair" else msg) {
                 "ok" -> { status = "done"; notify(app, "好了", doneText(app), false) }
                 "nopair" -> { status = ""; android.os.Handler(Looper.getMainLooper()).post { begin(app) } }
                 else -> status = "error:$msg"
@@ -265,8 +265,9 @@ object WAdb {
                 status = "done"
                 notify(app, "好了", doneText(app), false)
             } else {
-                status = "error:$msg"
-                notify(app, "没成功", msg, false)
+                val say = if ("pairing" in msg.lowercase()) "还没配对：重新点「使用配对码配对设备」再试一次" else msg
+                status = "error:$say"
+                notify(app, "没成功", say, false)
             }
         }
     }
