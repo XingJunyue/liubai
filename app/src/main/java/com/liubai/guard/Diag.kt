@@ -23,7 +23,7 @@ object Diag {
         val s = GuardService.instance
         sb.append("前台 ${s?.fgNow()}，桌面 ${s?.homeNow()}\n")
         sb.append("守护生效 ${Store.protectActive(c)}，今日应用 ${Store.active(c).keys.joinToString(",")}\n")
-        sb.append("用量权限 ${Usage.granted(c)}，放行中 ${Unlock.open(c)}\n")
+        sb.append("用量权限 ${Usage.granted(c)}，放行中 ${Unlock.open(c)}，卸载锁 ${Admin.on(c)}\n")
         sb.append("系统前台 ${try { Usage.update(c) } catch (x: Exception) { "?" }}\n")
         for ((k, v) in Store.active(c)) sb.append("$k 限 $v 分，已用 ${Store.usedMs(c, k) / 60000} 分\n")
         sb.append("—— 最近事件 ——\n")

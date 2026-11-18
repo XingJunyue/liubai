@@ -71,6 +71,7 @@ class UnlockActivity : ComponentActivity() {
                         PrimaryButton("算了，继续守护", Modifier.padding(top = 10.dp, bottom = 26.dp)) { finish() }
                     } else {
                         PrimaryButton("去卸载留白") {
+                            Admin.release(this@UnlockActivity)
                             try {
                                 startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             } catch (x: Exception) {

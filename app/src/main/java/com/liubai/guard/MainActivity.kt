@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         Keep.heal(this)
         Keep.schedule(this)
+        Admin.tidy(this)
         Widgets.updateAll(this)
     }
 }
@@ -209,6 +210,11 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
             if (on && !Keep.canHeal(c)) {
                 Spacer(Modifier.height(14.dp))
                 KeepTip()
+            }
+            val lockOn = remember(tick) { Admin.on(c) }
+            if (on && !lockOn && rows.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                LockTip()
             }
 
             Spacer(Modifier.height(18.dp))
@@ -373,6 +379,29 @@ fun KeepTip() {
             Text("知道了", color = C.Faint, fontSize = 14.sp,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
                     c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("keepTipHide", true).apply(); hide = true
+                }.padding(vertical = 6.dp, horizontal = 8.dp))
+        }
+    }
+}
+
+@Composable
+fun LockTip() {
+    val c = LocalContext.current
+    var hide by remember { mutableStateOf(c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("lockTipHide", false)) }
+    if (hide) return
+    SoftCard(Modifier.fillMaxWidth()) {
+        Text("给留白加一把卸载锁", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text("开启后，长按图标或在应用信息里都不能直接卸载。真想卸载，在留白里连点 10 次「确定」，锁会自己解开；今天不再守护任何应用时也会自动解开。",
+            fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("开启卸载锁") {
+            try { c.startActivity(Admin.askIntent(c).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (x: Exception) {}
+        }
+        Row(Modifier.padding(top = 8.dp)) {
+            Spacer(Modifier.weight(1f))
+            Text("以后再说", color = C.Faint, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                    c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("lockTipHide", true).apply(); hide = true
                 }.padding(vertical = 6.dp, horizontal = 8.dp))
         }
     }

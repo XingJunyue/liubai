@@ -36,7 +36,7 @@ class GuardService : AccessibilityService() {
         private val HINTS = listOf("settings", "packageinstaller", "securitycenter", "safecenter", "systemmanager", "permission", "launcher", "appdetail")
         fun sensitive(pkg: String) = pkg in SETTINGS || HINTS.any { it in pkg }
         // 只拦真正会关掉守护的按钮；页面本身随便看
-        private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "Uninstall", "Force stop", "Clear data", "Disable")
+        private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "取消激活", "Uninstall", "Force stop", "Clear data", "Disable", "Deactivate")
         private val CANCEL = listOf("取消", "Cancel")
     }
 
