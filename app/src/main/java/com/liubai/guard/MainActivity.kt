@@ -45,11 +45,20 @@ fun serviceOn(c: Context): Boolean {
     return s.contains("${c.packageName}/") && s.contains("GuardService")
 }
 
+/** 外部要求打开某一页（比如专注中被挡回来时直接回到专注界面）。 */
+object Nav { val open = androidx.compose.runtime.mutableStateOf<String?>(null) }
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         Diag.init(this)
         super.onCreate(b)
         setContent { LiubaiTheme { App() } }
+    }
+
+    override fun onNewIntent(i: Intent) {
+        super.onNewIntent(i)
+        setIntent(i)
+        i.getStringExtra("open")?.let { Nav.open.value = it }
     }
 
     override fun onResume() {
@@ -70,6 +79,10 @@ fun App() {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var poemsOn by remember { mutableStateOf(Poems.on(ctx)) }
+    val req = Nav.open.value
+    LaunchedEffect(req) {
+        if (req != null) { if (Unlock.guided(ctx)) { screen = req; drawer.close() }; Nav.open.value = null }
+    }
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
     if (screen != "setup" && screen != "picker" && screen != "intro") UpdatePrompt()
     BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }

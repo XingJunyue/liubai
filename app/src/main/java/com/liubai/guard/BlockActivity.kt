@@ -21,7 +21,12 @@ import androidx.compose.ui.unit.sp
 
 class BlockActivity : ComponentActivity() {
     private fun home() {
-        startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val w = intent.getStringExtra("why")
+        if ((w == "focus" || w == "scholar") && Focus.phase(this) == Focus.WORK)
+            startActivity(Intent(this, MainActivity::class.java).putExtra("open", "focus")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        else
+            startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         finish()
     }
 
@@ -80,7 +85,7 @@ class BlockActivity : ComponentActivity() {
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        PrimaryButton("回到桌面", Modifier.padding(bottom = 24.dp)) { home() }
+                        PrimaryButton(if (why == "focus" || why == "scholar") "回到专注" else "回到桌面", Modifier.padding(bottom = 24.dp)) { home() }
                     }
                 }
             }

@@ -356,6 +356,7 @@ class GuardService : AccessibilityService() {
             val back = object : Runnable {
                 override fun run() {
                     if (Virt.inFinder && n < 8) { n++; performGlobalAction(GLOBAL_ACTION_BACK); h.postDelayed(this, 280) }
+                    else if (why == "focus" || why == "scholar") toFocus()
                     else try {
                         startActivity(Intent(this@GuardService, BlockActivity::class.java)
                             .putExtra("pkg", pkg).putExtra("why", why)
@@ -365,6 +366,14 @@ class GuardService : AccessibilityService() {
             }
             h.post(back)
             Widgets.updateAll(this)
+            passPkg = null
+            return
+        }
+        if (why == "focus" || why == "scholar") {
+            // 专注中：不回桌面，直接回到留白的专注界面
+            Widgets.updateAll(this)
+            toFocus()
+            fg = packageName
             passPkg = null
             return
         }
@@ -379,6 +388,18 @@ class GuardService : AccessibilityService() {
         }
         fg = packageName   // 挡住后前台就是留白自己，等无障碍事件更新，不再用延迟的系统记录反复判断
         passPkg = null
+    }
+
+    /** 打开留白的专注界面；万一打不开，退回桌面兜底。 */
+    private fun toFocus() {
+        val m = Focus.leftMs(this) / 60_000L + 1
+        try {
+            startActivity(Intent(this, MainActivity::class.java).putExtra("open", "focus")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            Toast.makeText(this, "正在专注，还剩 $m 分钟", Toast.LENGTH_SHORT).show()
+        } catch (x: Exception) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        }
     }
 
     private fun hasText(root: android.view.accessibility.AccessibilityNodeInfo, w: String) =
