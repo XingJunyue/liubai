@@ -49,16 +49,21 @@ val LiubaiColors = lightColorScheme(
 )
 
 @Composable
-fun LiubaiTheme(content: @Composable () -> Unit) = MaterialTheme(colorScheme = LiubaiColors, content = content)
+fun LiubaiTheme(content: @Composable () -> Unit) {
+    val c = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.remember { Look.init(c); 0 }
+    MaterialTheme(colorScheme = LiubaiColors, content = content)
+}
 
 @Composable
 fun SoftCard(modifier: Modifier = Modifier, brush: Brush? = null, pad: Dp = 18.dp, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(24.dp)
+    val a = Look.cardAlpha()
     Column(
         modifier
-            .shadow(10.dp, shape, ambientColor = Color(0x22785A3C), spotColor = Color(0x22785A3C))
+            .shadow((10 * a * a).dp, shape, ambientColor = Color(0x22785A3C), spotColor = Color(0x22785A3C))
             .clip(shape)
-            .then(if (brush != null) Modifier.background(brush) else Modifier.background(C.Card))
+            .then(if (brush != null) Modifier.background(brush, alpha = a) else Modifier.background(C.Card.copy(alpha = a)))
             .padding(pad),
         content = content
     )
@@ -137,10 +142,10 @@ fun Sprout(size: Dp, ring: Boolean = true, moon: Boolean = false) {
 @Composable
 fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
-        onClick, modifier.fillMaxWidth().height(56.dp), enabled = enabled,
-        shape = RoundedCornerShape(20.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = C.Clay, contentColor = Color.White, disabledContainerColor = C.Track)
-    ) { Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+        onClick, modifier.fillMaxWidth().height(Look.btnHeight().dp), enabled = enabled,
+        shape = RoundedCornerShape(Look.btnRadius().dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Look.btnBg(), contentColor = Look.btnFg(), disabledContainerColor = C.Track)
+    ) { Text(Look.label("pb_$text", text), fontSize = Look.btnFont().sp, fontWeight = FontWeight.SemiBold) }
 }
 
 /**

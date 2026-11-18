@@ -539,22 +539,24 @@ fun FocusButton(onOpen: () -> Unit) {
     val phase = remember(tick) { Focus.phase(c) }
     val frac = remember(tick) { if (phase == Focus.IDLE) 0f else 1f - Focus.leftMs(c).toFloat() / Focus.totalMs(c).coerceAtLeast(1) }
     val col = if (phase == Focus.SHORT || phase == Focus.LONG) C.Sage else C.Clay
+    val s = Look.scale("focus")
+    val ink = Look.keyFg("focus")
     Row(
-        Modifier.clip(RoundedCornerShape(21.dp)).background(C.Card).clickable { onOpen() }
-            .padding(start = 10.dp, end = 14.dp).height(42.dp),
+        Modifier.clip(RoundedCornerShape((21 * s).dp)).background(Look.keyBg("focus")).clickable { onOpen() }
+            .padding(start = (10 * s).dp, end = (14 * s).dp).height((42 * s).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Canvas(Modifier.size(20.dp)) {
+        Canvas(Modifier.size((20 * s).dp)) {
             val sw = 2.dp.toPx()
             val tl = Offset(sw / 2, sw / 2); val sz = Size(size.width - sw, size.height - sw)
-            drawArc(if (phase == Focus.IDLE) C.Ink else C.Track, 0f, 360f, false, tl, sz, style = Stroke(sw))
+            drawArc(if (phase == Focus.IDLE) ink else C.Track, 0f, 360f, false, tl, sz, style = Stroke(sw))
             if (phase != Focus.IDLE) drawArc(col, -90f, 360f * frac, false, tl, sz, style = Stroke(sw, cap = StrokeCap.Round))
-            else drawLine(C.Ink, center, Offset(center.x, size.height * 0.28f), sw, StrokeCap.Round)
+            else drawLine(ink, center, Offset(center.x, size.height * 0.28f), sw, StrokeCap.Round)
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            if (phase == Focus.IDLE) "专注" else mmss(Focus.leftMs(c)),
-            fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.Medium
+            if (phase == Focus.IDLE) Look.label("focus", "专注") else mmss(Focus.leftMs(c)),
+            fontSize = (14 * s).sp, color = ink, fontWeight = FontWeight.Medium
         )
     }
 }

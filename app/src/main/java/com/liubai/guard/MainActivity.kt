@@ -76,7 +76,7 @@ fun App() {
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "widget", "settings"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "widget", "settings", "look"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -94,19 +94,20 @@ fun App() {
                             Gear(if (screen == "settings") C.ClayDeep else C.Ink)
                         }
                     }
-                    DrawerItem("今天", screen == "home") { go("home") }
-                    DrawerItem("分组额度", screen == "groups") { go("groups") }
-                    DrawerItem("睡前锁定", screen == "bed") { go("bed") }
-                    DrawerItem("每周小结", screen == "weekly") { go("weekly") }
-                    DrawerItem("小部件", screen == "widget") { go("widget") }
+                    DrawerItem(Look.label("menu_home", "今天"), screen == "home") { go("home") }
+                    DrawerItem(Look.label("menu_groups", "分组额度"), screen == "groups") { go("groups") }
+                    DrawerItem(Look.label("menu_bed", "睡前锁定"), screen == "bed") { go("bed") }
+                    DrawerItem(Look.label("menu_weekly", "每周小结"), screen == "weekly") { go("weekly") }
+                    DrawerItem(Look.label("menu_widget", "小部件"), screen == "widget") { go("widget") }
+                    DrawerItem(Look.label("menu_look", "外观"), screen == "look") { go("look") }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint)
-                        Text("检查更新", fontSize = 12.sp, color = C.ClayDeep,
+                        Text(Look.label("menu_update", "检查更新"), fontSize = 12.sp, color = C.ClayDeep,
                             modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { go("about") }.padding(horizontal = 8.dp, vertical = 6.dp))
                         Spacer(Modifier.weight(1f))
                         Text(
-                            "使用说明", fontSize = 13.sp,
+                            Look.label("menu_guide", "使用说明"), fontSize = 13.sp,
                             color = if (screen == "guide") C.ClayDeep else C.Soft,
                             fontWeight = if (screen == "guide") FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { go("guide") }.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -116,7 +117,7 @@ fun App() {
             }
         }
     ) {
-        Surface(color = C.Cream, modifier = Modifier.fillMaxSize()) {
+        LookBackground {
             val menu = { scope.launch { drawer.open() }; Unit }
             when (screen) {
                 "home" -> Home(onAdd = { screen = "picker" }, onMenu = menu, onFocus = { screen = "focus" }, poemsOn = poemsOn)
@@ -127,6 +128,7 @@ fun App() {
                 "about" -> Paged(menu) { AboutScreen() }
                 "widget" -> Paged(menu) { Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) { WidgetScreen() } }
                 "guide" -> Paged(menu) { GuideScreen() }
+                "look" -> Paged(menu) { LookScreen() }
                 "settings" -> Paged(menu) { SettingsScreen(poemsOn) { poemsOn = it; Poems.setOn(ctx, it) } }
                 "intro" -> Column(Modifier.fillMaxSize().systemBarsPadding().padding(top = 16.dp)) {
                     GuideScreen { Unlock.setGuided(ctx); screen = "home" }
@@ -140,12 +142,13 @@ fun App() {
 
 @Composable
 fun MenuButton(onMenu: () -> Unit) {
+    val s = Look.scale("menu")
     Box(
-        Modifier.size(42.dp).clip(CircleShape).background(C.Card).clickable { onMenu() },
+        Modifier.size((42 * s).dp).clip(CircleShape).background(Look.keyBg("menu")).clickable { onMenu() },
         contentAlignment = Alignment.Center
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            repeat(3) { i -> Box(Modifier.width(if (i == 1) 12.dp else 18.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(C.Ink)) }
+        Column(verticalArrangement = Arrangement.spacedBy((4 * s).dp)) {
+            repeat(3) { i -> Box(Modifier.width(((if (i == 1) 12 else 18) * s).dp).height((2 * s).dp).clip(RoundedCornerShape(1.dp)).background(Look.keyFg("menu"))) }
         }
     }
 }
@@ -187,13 +190,8 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).systemBarsPadding().padding(horizontal = 22.dp)
         ) {
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                MenuButton(onMenu)
-                Spacer(Modifier.weight(1f))
-                FocusButton(onFocus)
-            }
-            Spacer(Modifier.height(14.dp))
+            val topKeys = listOf("menu", "focus", "add").filter { Look.pos(it).startsWith("t") }
+            Spacer(Modifier.height(if (topKeys.isEmpty()) 12.dp else (12 + 42 * topKeys.maxOf { Look.scale(it) } + 14).dp))
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
             GreetingArea(poemsOn)
             val bed = remember(tick) { Store.bedActive(c) }
@@ -286,11 +284,29 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
             Spacer(Modifier.height(110.dp))
         }
 
-        Box(
-            Modifier.align(Alignment.BottomEnd).systemBarsPadding().padding(22.dp)
-                .clip(RoundedCornerShape(22.dp)).background(C.Clay).clickable { onAdd() }
-                .padding(horizontal = 22.dp, vertical = 15.dp)
-        ) { Text("＋ 添加应用", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        // 三个按键可以放到四个角，同一个角的排成一行
+        for ((corner, _) in Look.CORNERS) {
+            val keys = listOf("menu", "focus", "add").filter { Look.pos(it) == corner }
+            if (keys.isEmpty()) continue
+            val al = when (corner) { "tl" -> Alignment.TopStart; "tr" -> Alignment.TopEnd; "bl" -> Alignment.BottomStart; else -> Alignment.BottomEnd }
+            val top = corner.startsWith("t")
+            Row(
+                Modifier.align(al).systemBarsPadding().padding(horizontal = 22.dp, vertical = if (top) 12.dp else 22.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (k in keys) when (k) {
+                    "menu" -> MenuButton(onMenu)
+                    "focus" -> FocusButton(onFocus)
+                    else -> {
+                        val s = Look.scale("add")
+                        Box(
+                            Modifier.clip(RoundedCornerShape((22 * s).dp)).background(Look.keyBg("add")).clickable { onAdd() }
+                                .padding(horizontal = (22 * s).dp, vertical = (15 * s).dp)
+                        ) { Text(Look.label("add", "＋ 添加应用"), color = Look.keyFg("add"), fontSize = (15 * s).sp, fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+            }
+        }
     }
 
     editing?.let { pkg -> EditSheet(pkg) { editing = null; tick++ } }
