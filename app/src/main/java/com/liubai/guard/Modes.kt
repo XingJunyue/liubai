@@ -136,6 +136,23 @@ fun ModeEditor(x: Extra, onChange: (Extra) -> Unit) {
         onChange(x.copy(delay = listOf(0, 5, 15, 30)[it]))
     }
     Toggle("剩 5 分钟提醒", "快用完时轻轻提醒一下，别被突然弹走", x.warn) { onChange(x.copy(warn = it)) }
+    var more by remember { mutableStateOf(x.grow || x.opens > 0 || x.ask || x.again > 0) }
+    Text(
+        if (more) "收起" else "更多方式", fontSize = 13.sp, color = C.Soft,
+        modifier = Modifier.padding(top = 12.dp).clip(RoundedCornerShape(10.dp)).clickable { more = !more }.padding(vertical = 6.dp)
+    )
+    if (more) {
+        Toggle("越开越慢", "今天每打开一次，多停 5 秒，最多 60 秒", x.grow) { onChange(x.copy(grow = it, delay = if (it && x.delay == 0) 5 else x.delay)) }
+        SectionTitle("每天最多打开几次", "到了次数今天就不再开放")
+        Segments(listOf("不限", "3 次", "5 次", "10 次", "20 次"), listOf(0, 3, 5, 10, 20).indexOf(x.opens).coerceAtLeast(0)) {
+            onChange(x.copy(opens = listOf(0, 3, 5, 10, 20)[it]))
+        }
+        Toggle("打开前问一句", "「现在想做什么」，选完再进去", x.ask) { onChange(x.copy(ask = it)) }
+        SectionTitle("刷久了再问一次", "连续用满这么久，轻轻问一句还要不要继续")
+        Segments(listOf("不问", "5 分", "10 分", "20 分"), listOf(0, 5, 10, 20).indexOf(x.again).coerceAtLeast(0)) {
+            onChange(x.copy(again = listOf(0, 5, 10, 20)[it]))
+        }
+    }
 }
 
 // ---------------- 分组额度 ----------------
@@ -264,6 +281,17 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
 
 @Composable
 fun BedScreen() {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
+        Spacer(Modifier.height(8.dp))
+        Text("睡前锁定", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Spacer(Modifier.height(16.dp))
+        BedCard()
+    }
+}
+
+/** 睡前锁定的设置卡片，「时段」页里也用它。 */
+@Composable
+fun BedCard() {
     val c = LocalContext.current
     val today = remember { mutableStateOf(Store.bedActive(c)) }
     var want by remember { mutableStateOf(Store.bedDesired(c)) }
@@ -271,11 +299,8 @@ fun BedScreen() {
     // 开始 20:00–次日 2:00，结束 5:00–10:00
     val startVal = if (want.from < 12 * 60) want.from + 1440 else want.from
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
-        Spacer(Modifier.height(8.dp))
-        Text("睡前锁定", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-        Text("到点后，所有守护中的应用和分组都不开放，第二天早上自动恢复。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
-        Spacer(Modifier.height(16.dp))
+    Column {
+        Text("到点后，所有守护中的应用和分组都不开放，第二天早上自动恢复。", fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Toggle("开启睡前锁定", if (today.value.on) "今天在执行：${Rules.clock(today.value.from)}–${Rules.clock(today.value.to)}" else "今天还没开启", want.on) {
                 want = want.copy(on = it); saved = null
@@ -294,6 +319,5 @@ fun BedScreen() {
             }
             saved?.let { Text(it, fontSize = 13.sp, color = C.SageInk, modifier = Modifier.padding(top = 10.dp).align(Alignment.CenterHorizontally)) }
         }
-        Spacer(Modifier.height(40.dp))
     }
 }

@@ -19,16 +19,22 @@ data class Extra(
     val session: Int = 15,
     val cool: Int = 30,
     val delay: Int = 0,
-    val warn: Boolean = true
+    val warn: Boolean = true,
+    val grow: Boolean = false,     // 每打开一次，停的时间多 5 秒
+    val opens: Int = 0,            // 每天最多打开几次，0 不限
+    val ask: Boolean = false,      // 打开前问一句「现在想做什么」
+    val again: Int = 0             // 连续用满几分钟再问一次，0 不问
 ) {
     fun json(): JSONObject = JSONObject().put("m", mode).put("f", from).put("t", to)
         .put("s", session).put("c", cool).put("d", delay).put("w", warn)
+        .put("g", grow).put("o", opens).put("a", ask).put("ag", again)
 
     companion object {
         val MODES = listOf("每日总量", "限定时段", "单次限时", "完全不开")
         fun of(j: JSONObject) = Extra(
             j.optInt("m", 0), j.optInt("f", 540), j.optInt("t", 1260),
-            j.optInt("s", 15), j.optInt("c", 30), j.optInt("d", 0), j.optBoolean("w", true)
+            j.optInt("s", 15), j.optInt("c", 30), j.optInt("d", 0), j.optBoolean("w", true),
+            j.optBoolean("g", false), j.optInt("o", 0), j.optBoolean("a", false), j.optInt("ag", 0)
         )
     }
 }
@@ -88,7 +94,9 @@ object Rules {
             a.mode == 1 -> if (within(d.from to d.to, a.from to a.to)) d else a
             else -> a.copy(session = minOf(a.session, d.session), cool = maxOf(a.cool, d.cool))
         }
-        return base.copy(delay = delay, warn = warn)
+        fun minPos(x: Int, y: Int) = when { x <= 0 -> y; y <= 0 -> x; else -> minOf(x, y) }
+        return base.copy(delay = delay, warn = warn, grow = a.grow || d.grow, opens = minPos(a.opens, d.opens),
+            ask = a.ask || d.ask, again = minPos(a.again, d.again))
     }
 
     fun stricterBed(a: Bed, d: Bed): Bed = when {
@@ -105,7 +113,9 @@ object Rules {
             2 -> out += "单次 ${x.session} 分 · 歇 ${x.cool} 分"
             3 -> out += "完全不开"
         }
-        if (x.delay > 0) out += "打开前停 ${x.delay} 秒"
+        if (x.delay > 0) out += "打开前停 ${x.delay} 秒" + if (x.grow) "起" else ""
+        if (x.opens > 0) out += "每天 ${x.opens} 次"
+        if (x.ask) out += "先问一句"
         return out
     }
 }

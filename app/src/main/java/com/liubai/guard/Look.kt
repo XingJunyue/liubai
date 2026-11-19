@@ -109,7 +109,7 @@ object Look {
 
     /** 可以改字的按键：key 到默认文字。 */
     val NAMES = listOf(
-        "menu_home" to "今天", "menu_groups" to "分组额度", "menu_bed" to "睡前锁定", "menu_weekly" to "每周小结",
+        "menu_home" to "今天", "menu_groups" to "分组额度", "menu_time" to "时段", "menu_data" to "数据",
         "menu_widget" to "小部件", "menu_guide" to "使用说明", "menu_update" to "检查更新",
         "focus" to "专注", "add" to "＋ 添加应用",
         "pb_回到桌面" to "回到桌面", "pb_算了，不刷了" to "算了，不刷了", "pb_算了，继续守护" to "算了，继续守护",

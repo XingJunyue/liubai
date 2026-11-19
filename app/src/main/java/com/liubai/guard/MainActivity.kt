@@ -46,18 +46,24 @@ fun serviceOn(c: Context): Boolean {
 }
 
 /** 外部要求打开某一页（比如专注中被挡回来时直接回到专注界面）。 */
-object Nav { val open = androidx.compose.runtime.mutableStateOf<String?>(null) }
+object Nav {
+    val open = androidx.compose.runtime.mutableStateOf<String?>(null)
+    /** 页面里的第几个分页（「时段」的上课 / 睡前 / 场景），open 写成 "time:1" 这样。 */
+    var sub = 0
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         Diag.init(this)
         super.onCreate(b)
+        if (BuildConfig.DEBUG) TestHooks.run(this, intent)
         setContent { LiubaiTheme { App() } }
     }
 
     override fun onNewIntent(i: Intent) {
         super.onNewIntent(i)
         setIntent(i)
+        if (BuildConfig.DEBUG) TestHooks.run(this, i)
         i.getStringExtra("open")?.let { Nav.open.value = it }
     }
 
@@ -74,22 +80,23 @@ class MainActivity : ComponentActivity() {
 fun App() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val openExtra = remember { (ctx as? android.app.Activity)?.intent?.getStringExtra("open") }
-    var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra ?: if (Focus.phase(ctx) == Focus.WORK) "focus" else "home") }
+    var screen by remember { mutableStateOf(if (!Unlock.guided(ctx)) "intro" else openExtra?.let { Nav.sub = it.substringAfter(':', "0").toIntOrNull() ?: 0; it.substringBefore(':') } ?: if (Focus.phase(ctx) == Focus.WORK) "focus" else "home") }
     var picked by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var poemsOn by remember { mutableStateOf(Poems.on(ctx)) }
     val req = Nav.open.value
     LaunchedEffect(req) {
-        if (req != null) { if (Unlock.guided(ctx)) { screen = req; drawer.close() }; Nav.open.value = null }
+        if (req != null) { if (Unlock.guided(ctx)) { Nav.sub = req.substringAfter(':', "0").toIntOrNull() ?: 0; screen = req.substringBefore(':'); drawer.close() }; Nav.open.value = null }
     }
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
-    if (screen != "setup" && screen != "picker" && screen != "intro") UpdatePrompt()
+    if (screen != "setup" && screen != "picker" && screen != "intro" && !BuildConfig.PLAY) UpdatePrompt()
+    ConsentDialog()
     BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
     ModalNavigationDrawer(
         drawerState = drawer,
-        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "guide", "widget", "settings", "look"),
+        gesturesEnabled = screen in setOf("home", "weekly", "about", "groups", "bed", "time", "guide", "widget", "settings", "look"),
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.Cream, drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)) {
                 Column(Modifier.fillMaxHeight().systemBarsPadding().padding(horizontal = 14.dp)) {
@@ -109,14 +116,14 @@ fun App() {
                     }
                     DrawerItem(Look.label("menu_home", "今天"), screen == "home") { go("home") }
                     DrawerItem(Look.label("menu_groups", "分组额度"), screen == "groups") { go("groups") }
-                    DrawerItem(Look.label("menu_bed", "睡前锁定"), screen == "bed") { go("bed") }
-                    DrawerItem(Look.label("menu_weekly", "每周小结"), screen == "weekly") { go("weekly") }
+                    DrawerItem(Look.label("menu_time", "时段"), screen == "time") { go("time") }
+                    DrawerItem(Look.label("menu_data", "数据"), screen == "weekly") { go("weekly") }
                     DrawerItem(Look.label("menu_widget", "小部件"), screen == "widget") { go("widget") }
                     DrawerItem(Look.label("menu_look", "外观"), screen == "look") { go("look") }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint)
-                        Text(Look.label("menu_update", "检查更新"), fontSize = 12.sp, color = C.ClayDeep,
+                        Text(if (BuildConfig.PLAY) "关于" else Look.label("menu_update", "检查更新"), fontSize = 12.sp, color = C.ClayDeep,
                             modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { go("about") }.padding(horizontal = 8.dp, vertical = 6.dp))
                         Spacer(Modifier.weight(1f))
                         Text(
@@ -137,7 +144,7 @@ fun App() {
                 "focus" -> Box(Modifier.fillMaxSize().systemBarsPadding()) { FocusScreen(onBack = { screen = "home" }) }
                 "weekly" -> Paged(menu) { WeeklyScreen() }
                 "groups" -> Paged(menu) { GroupsScreen() }
-                "bed" -> Paged(menu) { BedScreen() }
+                "bed", "time" -> Paged(menu) { TimeScreen() }
                 "about" -> Paged(menu) { AboutScreen() }
                 "widget" -> Paged(menu) { Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) { WidgetScreen() } }
                 "guide" -> Paged(menu) { GuideScreen() }
@@ -354,6 +361,7 @@ fun UsageGuide() {
 /** 一次性的 adb 授权：之后无障碍被系统关掉，留白会自己重新打开。 */
 @Composable
 fun KeepTip(force: Boolean = false) {
+    if (BuildConfig.PLAY) return
     val c = LocalContext.current
     var hide by remember { mutableStateOf(!force && c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("keepTipHide", false)) }
     var done by remember { mutableStateOf(Keep.canHeal(c) || WAdb.adbMode(c)) }
@@ -407,6 +415,7 @@ fun KeepTip(force: Boolean = false) {
 
 @Composable
 fun LockTip(force: Boolean = false, onResult: () -> Unit = {}) {
+    if (BuildConfig.PLAY) return
     val c = LocalContext.current
     var hide by remember { mutableStateOf(!force && c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("lockTipHide", false)) }
     // 系统规定：激活设备管理器的页面不能用「新任务」方式打开，否则会立刻自己关掉，所以这里用 ActivityResult 启动。
@@ -445,7 +454,7 @@ fun SetupGuide() {
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Spacer(Modifier.height(12.dp))
-        PrimaryButton("去打开") { c.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        PrimaryButton("去打开") { Consent.openA11y(c) }
         Spacer(Modifier.height(14.dp))
         Text("系统有时会悄悄把它关掉，顺手做这几件小事就稳了：", fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp)
         Text(

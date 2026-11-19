@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "com.liubai.guard"
-    compileSdk = 34
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.liubai.guard"
         minSdk = 26
@@ -12,7 +12,16 @@ android {
         val run = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionCode = run
         versionName = "1.$run"
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // 测试机（模拟器）是 x86：传 -PallAbi 时不过滤
+        if (!project.hasProperty("allAbi")) ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        buildConfigField("boolean", "PLAY", "false")
+    }
+    flavorDimensions += "ch"
+    productFlavors {
+        // GitHub 发布的完整版：自更新、无线调试保活、卸载锁
+        create("full") { dimension = "ch"; targetSdk = 34 }
+        // Google Play 版：不自更新、不用无线调试和设备管理，目标 API 跟 Play 要求走
+        create("play") { dimension = "ch"; targetSdk = 36; buildConfigField("boolean", "PLAY", "true") }
     }
     signingConfigs {
         create("rel") {
@@ -45,6 +54,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("com.github.MuntashirAkon:sun-security-android:1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")

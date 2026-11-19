@@ -101,6 +101,8 @@ object Focus {
     private fun addFocused(c: Context, ms: Long) {
         if (ms <= 0) return
         dayFix(c); p(c).edit().putLong("ms", p(c).getLong("ms", 0L) + ms).apply()
+        Hist.add(c, "focus", ms)
+        Tasks.addFocus(c, ms)
     }
 
     fun leftMs(c: Context): Long = when {
@@ -174,6 +176,7 @@ object Focus {
     /** 守护服务和界面都会调用：到点就收尾并提醒。 */
     @Synchronized
     fun tick(c: Context) {
+        Tasks.checkPlans(c)
         Noise.sync(c)
         if (!running(c) || System.currentTimeMillis() < endAt(c)) return
         val ph = phase(c)
@@ -182,6 +185,18 @@ object Focus {
         val all = p(c).getBoolean("allDone", false)
         if (all) p(c).edit().putBoolean("allDone", false).apply()
         notifyDone(c, ph, all)
+    }
+
+    /** 预约的番茄自动开始时提醒一下。 */
+    fun notifyStart(c: Context) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val nm = c.getSystemService(NotificationManager::class.java) ?: return
+        nm.createNotificationChannel(NotificationChannel("focus", "番茄钟", NotificationManager.IMPORTANCE_HIGH))
+        val pi = PendingIntent.getActivity(c, 7, Intent(c, MainActivity::class.java).putExtra("open", "focus")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE)
+        nm.notify(77, NotificationCompat.Builder(c, "focus").setSmallIcon(R.drawable.ic_mono)
+            .setContentTitle("预约的专注开始了").setContentText("${Tasks.curTag(c)} · ${len(c, WORK)} 分钟").setAutoCancel(true).setContentIntent(pi).build())
     }
 
     private fun notifyDone(c: Context, ph: Int, all: Boolean = false) {
@@ -313,6 +328,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
         val ps = remember(tick) { Focus.pos(c) }
         val lps = remember(tick) { Focus.loops(c) }
         val lp = remember(tick) { Focus.loop(c) }
+        TaskChip(enabled = !strict)
         FlowRowDots(sq, ps, phase != Focus.IDLE)
         if (lps > 0) Text("第 ${lp + 1} / $lps 遍", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
 
@@ -449,6 +465,8 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 SeqEditor(enabled = phase == Focus.IDLE) { tick++ }
                 Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
                 Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
+                HushToggle("专注时收起通知", "白名单和电话照常，其他的专注结束后放回来", { Hush.on(it) }, { x, v -> Hush.setOn(x, v) })
+                PlanEditor()
             }
         }
         Spacer(Modifier.height(36.dp))

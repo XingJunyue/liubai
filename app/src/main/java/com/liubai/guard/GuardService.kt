@@ -74,7 +74,7 @@ class GuardService : AccessibilityService() {
      */
     private fun hot(): Boolean {
         val f = fg
-        return (f != null && f != packageName && guarded(f)) || Focus.scholarLocking(this)
+        return (f != null && f != packageName && guarded(f)) || Focus.scholarLocking(this) || Scenes.strictNow(this)
     }
     private fun nextDelay(): Long {
         if (!::pm.isInitialized || !pm.isInteractive) {
@@ -86,7 +86,10 @@ class GuardService : AccessibilityService() {
     /** 马上检查一次，并按新的节奏排下一次。 */
     private fun kick() { h.removeCallbacks(tick); h.post(tick) }
     private val screen = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: android.content.Context?, i: Intent?) { kick() }
+        override fun onReceive(c: android.content.Context?, i: Intent?) {
+            if (i?.action == Intent.ACTION_USER_PRESENT) Hist.add(this@GuardService, "pick", 1)
+            kick()
+        }
     }
 
     private var lastWin = 0L
@@ -186,7 +189,7 @@ class GuardService : AccessibilityService() {
                 if (pkg == homePkg || (pkg != passPkg && pkg != packageName && guarded(pkg))) passPkg = null
                 val wasHot = hot()
                 fg = pkg
-                if (pkg != packageName) maybePause(pkg)
+                if (pkg != packageName) { if (guarded(pkg)) enter(pkg) else inOpen = null }
                 if (hot() != wasHot) kick()
             }
             fg?.let { p -> reason(p)?.let { block(p, it) } }
@@ -246,10 +249,15 @@ class GuardService : AccessibilityService() {
         if (pkg == packageName) return null
         if (updatePass(pkg)) return null
         if (Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"
+        // 重要的课：和无敌模式一样，只开放白名单
+        if (Scenes.strictNow(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss() && pkg != homePkg) return "class"
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
         if (lim == null && groups.isEmpty()) return null
         if (Focus.locking(this)) return "focus"
+        // 紧急用一下：这几分钟放行（专注、重要课不放）
+        if (System.currentTimeMillis() < Store.sosUntil(this, pkg)) return null
+        if (Scenes.lockNow(this)) return "scene"
         val m = Rules.nowMin()
         val bed = Store.bedActive(this)
         if (bed.on && Rules.inWin(m, bed.from, bed.to)) return "bed"
@@ -259,24 +267,51 @@ class GuardService : AccessibilityService() {
             if (x.mode == 1 && !Rules.inWin(m, x.from, x.to)) return "window"
             if (x.mode == 2 && System.currentTimeMillis() < Store.coolUntil(this, pkg)) return "cool"
             if (used(pkg) >= lim * 60_000L) return "daily"
+            if (x.opens > 0 && pkg != inOpen && Store.opens(this, pkg) >= x.opens) return "opens"
         }
         for (g in groups) if (g.pkgs.sumOf { used(it) } >= g.min * 60_000L) return "group:${g.id}"
         return null
     }
 
-    private fun maybePause(pkg: String) {
-        if (pkg == passPkg || reason(pkg) != null || Store.active(this)[pkg] == null) return
-        val d = Store.extraActive(this, pkg).delay
-        if (d <= 0) return
+    /** 这次打开前要不要先停一下；停了返回 true（这次还不算打开）。 */
+    private fun maybePause(pkg: String): Boolean {
+        if (pkg == passPkg || reason(pkg) != null || !guarded(pkg)) return false
+        val x = Store.extraActive(this, pkg)
+        val light = Scenes.lightNow(this)          // 水课：每次打开都先停一下、问一句
+        var d = x.delay
+        if (x.grow) d += 5 * Store.opens(this, pkg)
+        if (light) d = maxOf(d, 10)
+        d = d.coerceAtMost(60)
+        val ask = x.ask || light
+        if (d <= 0 && !ask) return false
         val now = SystemClock.elapsedRealtime()
-        if (now - lastPause < 1500) return
+        if (now - lastPause < 1500) return true
         lastPause = now
         try {
             startActivity(Intent(this, PauseActivity::class.java)
-                .putExtra("pkg", pkg).putExtra("sec", d)
+                .putExtra("pkg", pkg).putExtra("sec", d.coerceAtLeast(if (ask) 3 else 1)).putExtra("ask", ask)
+                .putExtra("light", light)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        } catch (x: Exception) {}
+        } catch (x: Exception) { return false }
+        return true
     }
+
+    /** 进到一个受守护的应用：没被停下来就记一次打开。 */
+    private fun enter(pkg: String) {
+        if (pkg == packageName) return
+        if (pkg != inOpen) inOpen = null
+        if (!guarded(pkg) || pkg == inOpen) return
+        if (maybePause(pkg)) return
+        if (reason(pkg) != null) return
+        Store.addOpen(this, pkg)
+        inOpen = pkg
+        againPkg = pkg; againStart = System.currentTimeMillis(); againLast = againStart
+    }
+
+    private var inOpen: String? = null
+    private var againPkg: String? = null
+    private var againStart = 0L
+    private var againLast = 0L
 
     /** PauseActivity 点了「继续」后调用：本次放行，直到离开它。 */
     fun pass(pkg: String) { passPkg = pkg }
@@ -286,6 +321,19 @@ class GuardService : AccessibilityService() {
         val lim = Store.active(this)[p] ?: return
         val x = Store.extraActive(this, p)
         val wall = System.currentTimeMillis()
+        if (x.again > 0) {
+            if (againPkg != p || wall - againLast > 60_000) { againPkg = p; againStart = wall }
+            againLast = wall
+            if (wall - againStart >= x.again * 60_000L) {
+                againStart = wall
+                try {
+                    startActivity(Intent(this, PauseActivity::class.java).putExtra("pkg", p).putExtra("sec", 5)
+                        .putExtra("again", x.again).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    fg = packageName
+                } catch (e: Exception) {}
+                return
+            }
+        }
         if (x.mode == 2) {
             if (sessPkg != p || wall - sessLast > 60_000) { sessPkg = p; sessStart = wall }
             sessLast = wall
@@ -325,7 +373,8 @@ class GuardService : AccessibilityService() {
         } else sysSeen = null
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: Virt.map(sys)
-        if (cur != null && Focus.scholarLocking(this) && reason(cur) == "scholar") { block(cur, "scholar"); return }
+        HushWatch.check(this)
+        if (cur != null && (Focus.scholarLocking(this) || Scenes.strictNow(this))) reason(cur)?.let { r -> if (r == "scholar" || r == "class") { block(cur, r); return } }
         if (cur != null && cur != packageName && guarded(cur)) {
             reason(cur)?.let { block(cur, it); return }
             watch(cur)
@@ -361,7 +410,7 @@ class GuardService : AccessibilityService() {
             var n = 0
             val back = object : Runnable {
                 override fun run() {
-                    if (Virt.inFinder && n < 8) { n++; performGlobalAction(GLOBAL_ACTION_BACK); h.postDelayed(this, 280) }
+                    if (Virt.inSec(pkg) && n < 8) { n++; performGlobalAction(GLOBAL_ACTION_BACK); h.postDelayed(this, 280) }
                     else if (why == "focus" || why == "scholar") toFocus()
                     else try {
                         startActivity(Intent(this@GuardService, BlockActivity::class.java)
@@ -375,7 +424,7 @@ class GuardService : AccessibilityService() {
             passPkg = null
             return
         }
-        if (why == "focus" || why == "scholar") {
+        if (why == "focus" || why == "scholar" || (why == "class" && Focus.phase(this) == Focus.WORK)) {
             // 专注中：不回桌面，直接回到留白的专注界面
             Widgets.updateAll(this)
             toFocus()

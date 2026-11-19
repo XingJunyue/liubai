@@ -61,9 +61,11 @@ fun WeeklyScreen() {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
-        Text("每周小结", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-        Text("最近 7 天，守护中的应用", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+        Text("数据", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text("看得见的进步", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(18.dp))
+        InsightsTop()
+        Text("最近 7 天", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 8.dp, bottom = 10.dp))
         val x = w
         when {
             !Usage.granted(c) -> UsageGuide()

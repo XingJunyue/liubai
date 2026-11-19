@@ -211,8 +211,8 @@ fun AboutScreen() {
             state = when { r == null -> "error"; r.code > BuildConfig.VERSION_CODE -> "found"; else -> "latest" }
         }
     }
-    // 一打开就查，不用再点一次
-    LaunchedEffect(Unit) { check() }
+    // 一打开就查，不用再点一次（Play 版由商店更新，不查）
+    LaunchedEffect(Unit) { if (!BuildConfig.PLAY) check() }
     fun get() {
         val r = rel ?: return
         if (!Updater.canInstall(c)) {
@@ -240,6 +240,8 @@ fun AboutScreen() {
                 Text("留白", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 8.dp))
                 Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
             }
+            if (BuildConfig.PLAY) Text("在 Google Play 里更新", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).align(Alignment.CenterHorizontally))
+            if (!BuildConfig.PLAY) {
             Spacer(Modifier.height(18.dp))
             val r = rel
             when (state) {
@@ -263,6 +265,7 @@ fun AboutScreen() {
                 "ready" -> PrimaryButton("安装") { file?.let { Updater.install(c, it) } }
                 "checking" -> PrimaryButton("检查中…", enabled = false) {}
                 else -> PrimaryButton("检查更新") { check() }
+            }
             }
         }
         Spacer(Modifier.height(14.dp))

@@ -40,7 +40,7 @@ fun SettingsScreen(poemsOn: Boolean, onPoems: (Boolean) -> Unit) {
 
         SectionTitle("守护需要的权限")
         SoftCard(Modifier.fillMaxWidth()) {
-            StatusRow("无障碍", "知道你此刻在用什么，到点才能拦住", acc) { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+            StatusRow("无障碍", "知道你此刻在用什么，到点才能拦住", acc) { Consent.openA11y(c) }
             StatusRow("使用情况访问", "读取每个应用今天真实用了多久", usage) {
                 open(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:${c.packageName}")), Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
             }
@@ -50,17 +50,31 @@ fun SettingsScreen(poemsOn: Boolean, onPoems: (Boolean) -> Unit) {
             StatusRow("自启动、后台运行、电池不限制", "在应用信息里设置，系统就不容易把留白关掉", null) { open(appInfo) }
         }
 
-        Spacer(Modifier.height(18.dp))
-        SectionTitle("卸载锁")
-        if (lock) SoftCard(Modifier.fillMaxWidth()) {
-            StatusRow("卸载锁", "长按图标、应用信息里都卸不掉。在留白里连点 10 次「确定」会自动解开；今天没有守护中的应用时也会自动解开", true, null)
-        } else LockTip(force = true) { tick++ }
+        if (!BuildConfig.PLAY) {
+            Spacer(Modifier.height(18.dp))
+            SectionTitle("卸载锁")
+            if (lock) SoftCard(Modifier.fillMaxWidth()) {
+                StatusRow("卸载锁", "长按图标、应用信息里都卸不掉。在留白里连点 10 次「确定」会自动解开；今天没有守护中的应用时也会自动解开", true, null)
+            } else LockTip(force = true) { tick++ }
+
+            Spacer(Modifier.height(18.dp))
+            SectionTitle("被关掉后自动重启")
+            if (heal) SoftCard(Modifier.fillMaxWidth()) {
+                StatusRow("无线调试授权", "已授权。无障碍被系统关掉时，留白会自己重新打开", true, null)
+            } else KeepTip(force = true)
+        }
 
         Spacer(Modifier.height(18.dp))
-        SectionTitle("被关掉后自动重启")
-        if (heal) SoftCard(Modifier.fillMaxWidth()) {
-            StatusRow("无线调试授权", "已授权。无障碍被系统关掉时，留白会自己重新打开", true, null)
-        } else KeepTip(force = true)
+        SectionTitle("紧急用一下", "被拦住时可以等 20 秒、放行 5 分钟；专注、无敌模式和重要课里不能用")
+        SoftCard(Modifier.fillMaxWidth()) {
+            var sos by remember { mutableStateOf(Store.sosMax(c)) }
+            val pend = remember(sos) { Store.sosPending(c) }
+            Text("每周最多", fontSize = 13.sp, color = C.Soft)
+            Spacer(Modifier.height(6.dp))
+            Segments(listOf("关掉", "1 次", "2 次", "3 次"), (pend ?: sos).coerceIn(0, 3)) { Store.setSosMax(c, it); sos = Store.sosMax(c) }
+            Text(if (pend != null && pend > sos) "改多了要等下周生效，这周仍是 $sos 次" else "这周还剩 ${Store.sosLeft(c)} 次 · 改少马上生效，改多下周生效",
+                fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
+        }
 
         Spacer(Modifier.height(18.dp))
         SectionTitle("首页")

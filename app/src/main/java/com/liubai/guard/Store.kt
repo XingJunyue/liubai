@@ -189,7 +189,35 @@ object Store {
     fun warned(c: Context, pkg: String) = p(c).getBoolean("u_${today()}_w_$pkg", false)
     fun setWarned(c: Context, pkg: String) = p(c).edit().putBoolean("u_${today()}_w_$pkg", true).apply()
     fun walkedAway(c: Context) = p(c).getInt("u_${today()}_walk", 0)
-    fun addWalkedAway(c: Context) { val k = "u_${today()}_walk"; p(c).edit().putInt(k, p(c).getInt(k, 0) + 1).apply() }
+    fun addWalkedAway(c: Context) { val k = "u_${today()}_walk"; p(c).edit().putInt(k, p(c).getInt(k, 0) + 1).apply(); Hist.add(c, "walk", 1) }
+
+    // ---------- 打开次数、紧急解锁 ----------
+    fun opens(c: Context, pkg: String) = p(c).getInt("u_${today()}_o_$pkg", 0)
+    fun addOpen(c: Context, pkg: String) { roll(c); val k = "u_${today()}_o_$pkg"; p(c).edit().putInt(k, p(c).getInt(k, 0) + 1).apply() }
+
+    private fun week(): String { val k = java.util.Calendar.getInstance(); k.firstDayOfWeek = java.util.Calendar.MONDAY; return "${k.get(java.util.Calendar.YEAR)}w${k.get(java.util.Calendar.WEEK_OF_YEAR)}" }
+    /** 每周能紧急用几次（0 = 关掉这个口子）。改少马上生效，改多下周生效。 */
+    fun sosMax(c: Context) = p(c).getInt("sosMax", 2)
+    fun setSosMax(c: Context, n: Int) {
+        val cur = sosMax(c)
+        if (n <= cur) p(c).edit().putInt("sosMax", n).remove("sosNext").apply()
+        else p(c).edit().putInt("sosNext", n).putString("sosNextW", week()).apply()
+    }
+    fun sosPending(c: Context): Int? = if (p(c).contains("sosNext")) p(c).getInt("sosNext", 0) else null
+    fun sosUsed(c: Context): Int {
+        val pr = p(c)
+        if (pr.contains("sosNext") && pr.getString("sosNextW", "") != week()) pr.edit().putInt("sosMax", pr.getInt("sosNext", 2)).remove("sosNext").apply()
+        return if (pr.getString("sosW", "") == week()) pr.getInt("sosN", 0) else 0
+    }
+    fun sosLeft(c: Context) = (sosMax(c) - sosUsed(c)).coerceAtLeast(0)
+    fun useSos(c: Context, pkg: String, min: Int) {
+        val n = sosUsed(c) + 1
+        p(c).edit().putString("sosW", week()).putInt("sosN", n).putLong("sos_$pkg", System.currentTimeMillis() + min * 60_000L).apply()
+    }
+    fun sosUntil(c: Context, pkg: String) = p(c).getLong("sos_$pkg", 0L)
+
+    /** 打开时选的「想做什么」，今天每种几次。 */
+    fun addIntent(c: Context, what: String) { roll(c); val k = "u_${today()}_i_$what"; p(c).edit().putInt(k, p(c).getInt(k, 0) + 1).apply() }
 
     fun usedMs(c: Context, pkg: String): Long {
         roll(c)
