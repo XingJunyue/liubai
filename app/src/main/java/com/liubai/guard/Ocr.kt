@@ -108,9 +108,9 @@ object Ocr {
         val sec: (Int, Int) -> Pair<Int, Int> = { a, b -> Scenes.secRange(c, a, b) }
         // 先用最可能的识别器，认不出再换
         val order = when (Tr.lang) { "ja" -> listOf("ja", "zh", "ko"); "ko" -> listOf("ko", "zh", "ja"); else -> listOf("zh", "ja", "ko") }
-        var best: List<Slot>? = null; var bestLines: List<L> = emptyList(); var err: String? = null
+        var best: List<Slot>? = null; var bestLines: List<L> = emptyList(); var bestFit = false; var err: String? = null
         fun next(i: Int) {
-            if (i >= order.size || (best?.size ?: 0) >= 3) {
+            if (i >= order.size || ((best?.size ?: 0) >= 3 && bestFit)) {
                 last = bestLines
                 if (best.isNullOrEmpty()) done(null, err ?: tr("没认出课程，换一张更清楚、带星期表头的截图试试")) else done(best, null)
                 return
@@ -125,7 +125,12 @@ object Ocr {
                 if (bestLines.isEmpty()) bestLines = ls
                 try {
                     val r = parse(ls, bmp.height, sec)
-                    if (r.size > (best?.size ?: 0)) { best = r; bestLines = ls }
+                    // 看字形挑识别器：有假名用日文，有谚文用韩文，否则中文/拉丁
+                    val all = ls.joinToString("") { it.t }
+                    val want = when { Regex("[\\u3040-\\u30FF]|曜|\\d限|講義|号館|号室").containsMatchIn(all) -> "ja"; Regex("[\\uAC00-\\uD7AF]").containsMatchIn(all) -> "ko"; else -> "zh" }
+                    val fit = order[i] == want
+                    val n = r.size; val b = best?.size ?: 0
+                    if (n > b || (n == b && n > 0 && fit && !bestFit)) { best = r; bestLines = ls; bestFit = fit }
                 } catch (x: Exception) { Diag.log("课表识别 ${order[i]}：${x.message}"); if (err == null) err = tr("没找到「周一、周二…」那一行，换一张带星期表头的截图试试") }
                 client.close(); next(i + 1)
             }.addOnFailureListener { client.close(); if (err == null) err = tr("识别失败：{0}", it.message ?: ""); next(i + 1) }
@@ -220,7 +225,7 @@ object Ocr {
 
     /** 教室、老师、周次这些不是课名。 */
     private val NOISE = Regex(
-        "\\d+[-~～]\\d+(周|週|주)|第?\\d+(-\\d+)?(节|節|限)|^\\d+(周|週|주)|[A-Za-z]?\\d{3,}|教室|楼|室$|老师|教师|单周|双周|\\(|（|" +
+        "\\d+[-~～]\\d+(周|週|주)|第?\\d+(-\\d+)?(节|節|限)|^\\d+(周|週|주)|[A-Za-z]?\\d{3,}|教室|楼|室\\s*\\d*$|義室|老师|教师|单周|双周|\\(|（|" +
             "(?i)\\b(room|rm\\.?|hall|bldg|building|prof\\.?|dr\\.|teacher|weeks?|wk|salle|bât|amphi|raum|hörsaal|gebäude|aula|sala|edificio|semanas?|semaines?|wochen?)\\b|" +
             "講義室|号館|号室|先生|강의실|교실|호관|교수"
     )
@@ -241,7 +246,9 @@ object Ocr {
         val n = parts.fold("") { acc, p ->
             if (acc.isEmpty()) p
             else if (acc.last().isLetter() && acc.last().code < 0x2E80 && p.first().isLetter() && p.first().code < 0x2E80) "$acc $p" else acc + p
-        }.replace(Regex("\\s+"), " ").replace(Regex("(?<=[\\u3040-\\u30FF\\u4E00-\\u9FFF]) (?=[\\u3040-\\u30FF\\u4E00-\\u9FFF])"), "").trim().take(30)
+        }.replace(Regex("\\s+"), " ").replace(Regex("(?<=[\\u3040-\\u30FF\\u4E00-\\u9FFF]) (?=[\\u3040-\\u30FF\\u4E00-\\u9FFF])"), "").trim()
+            // 中日韩课名后面粘着的零碎字母数字（多半是教室号认错）去掉
+            .replace(Regex("(?<=[\\uAC00-\\uD7AF])[A-Za-z0-9]{3,5}$"), "").take(30)
         return n.takeIf { it.length >= 2 }
     }
 }
