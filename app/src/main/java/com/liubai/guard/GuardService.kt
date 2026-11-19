@@ -91,7 +91,9 @@ class GuardService : AccessibilityService() {
         val f = fg
         return (f != null && f != packageName && guarded(f)) || Focus.scholarLocking(this) || Scenes.strictNow(this)
     }
+    private var quick = false
     private fun nextDelay(): Long {
+        if (quick) { quick = false; return 4_500 }
         if (!::pm.isInitialized || !pm.isInteractive) {
             // 番茄钟在走：熄屏也要准时提醒，按剩余时间来排
             return if (Focus.running(this) && Focus.pausedLeft(this) < 0) Focus.leftMs(this).coerceIn(1_000, 60_000) else 60_000
@@ -395,7 +397,7 @@ class GuardService : AccessibilityService() {
         val sys = Usage.update(this)
         val sysApp = Virt.map(sys)
         if (sysApp != null && sysApp != fg && sysApp != packageName && guarded(sysApp) && now - lastBlock > 10_000) {
-            if (sysSeen != sysApp) { sysSeen = sysApp; sysSince = now; h.removeCallbacks(tick); h.postDelayed(tick, 4_500) }
+            if (sysSeen != sysApp) { sysSeen = sysApp; sysSince = now; quick = true }
             else if (now - sysSince >= 4_000) { Diag.log("无障碍没报，按系统记录认出 $sysApp（原 $fg）"); flush(); fg = sysApp; sysSeen = null; enter(sysApp) }
         } else sysSeen = null
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
