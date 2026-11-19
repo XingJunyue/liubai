@@ -78,3 +78,22 @@ jobs:
           gh release create "build-${{ github.run_number }}" "out/liubai-1.${{ github.run_number }}.apk" "out/liubai-play-1.${{ github.run_number }}.aab" \
             --title "留白 1.${{ github.run_number }}" \
             --notes "$(git log -1 --pretty=%s)" --target "${{ github.sha }}"
+
+  # 非 main 分支：把安装包发成预发布（preview），方便先装上试；不影响正式发布
+  preview:
+    needs: [build, emulator]
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: out, path: out }
+      - name: Publish preview prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          b="${GITHUB_REF_NAME//\//-}"; b="${b%-redo}"
+          n="${{ github.run_number }}"
+          cp "out/liubai-1.$n.apk" "liubai-$b-preview-$n.apk"
+          gh release create "preview-$b-$n" "liubai-$b-preview-$n.apk" --prerelease --latest=false \
+            --title "预览：$b #$n" --notes "分支 $GITHUB_REF_NAME 的预览安装包（不是正式版）。$(git log -1 --pretty=%s)" --target "${{ github.sha }}"
