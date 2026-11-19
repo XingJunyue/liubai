@@ -129,6 +129,14 @@ class GuardService : AccessibilityService() {
         } catch (x: Exception) {}
     }
 
+    /** 屏幕上面积最大的应用窗口（不算系统栏、输入法、悬浮小窗）。 */
+    private fun bigApp(): String? = try {
+        val r = android.graphics.Rect()
+        windows.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .mapNotNull { w -> w.getBoundsInScreen(r); val p = w.root?.packageName?.toString(); if (p == null || p in IGNORE) null else p to r.width().toLong() * r.height() }
+            .maxByOrNull { it.second }?.first
+    } catch (x: Exception) { null }
+
     fun fgNow() = fg
     fun homeNow() = homePkg
 
@@ -197,13 +205,17 @@ class GuardService : AccessibilityService() {
             val skip = !st && nowW - lastWin < 700
             if (!skip) {
             lastWin = nowW
-            val pkg = Virt.map(try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg)
+            val act = try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg
+            // 小窗、悬浮便签之类可能抢走「活动窗口」：铺满屏幕的那个应用才是真正在用的
+            val big = bigApp()
+            val pkg = Virt.map(if (big != null && big != act && guarded(big) && (act == null || !guarded(act))) big else act)
             if (pkg != null && pkg !in IGNORE && pkg != fg) {
                 flush()
                 if (fg != null && fg != packageName && guarded(fg!!)) { lastWidget = 0L }  // 离开受守护应用，马上刷新一次
                 if (pkg == homePkg || (pkg != passPkg && pkg != packageName && guarded(pkg))) passPkg = null
                 val wasHot = hot()
                 fg = pkg
+                if (guarded(pkg)) Diag.log("进入 $pkg（活动窗口 $act）")
                 if (pkg != packageName) { if (guarded(pkg)) enter(pkg) else inOpen = null }
                 if (hot() != wasHot) kick()
             }
@@ -383,8 +395,8 @@ class GuardService : AccessibilityService() {
         val sys = Usage.update(this)
         val sysApp = Virt.map(sys)
         if (sysApp != null && sysApp != fg && sysApp != packageName && guarded(sysApp) && now - lastBlock > 10_000) {
-            if (sysSeen != sysApp) { sysSeen = sysApp; sysSince = now }
-            else if (now - sysSince >= 4_000) { Diag.log("无障碍没报，按系统记录认出 $sysApp（原 $fg）"); fg = sysApp; sysSeen = null }
+            if (sysSeen != sysApp) { sysSeen = sysApp; sysSince = now; h.removeCallbacks(tick); h.postDelayed(tick, 4_500) }
+            else if (now - sysSince >= 4_000) { Diag.log("无障碍没报，按系统记录认出 $sysApp（原 $fg）"); flush(); fg = sysApp; sysSeen = null; enter(sysApp) }
         } else sysSeen = null
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: Virt.map(sys)

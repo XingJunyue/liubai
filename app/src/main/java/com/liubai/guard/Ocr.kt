@@ -109,9 +109,17 @@ object Ocr {
         // 先用最可能的识别器，认不出再换
         val order = when (Tr.lang) { "ja" -> listOf("ja", "zh", "ko"); "ko" -> listOf("ko", "zh", "ja"); else -> listOf("zh", "ja", "ko") }
         var best: List<Slot>? = null; var bestLines: List<L> = emptyList(); var bestFit = false; var err: String? = null
+        val others = ArrayList<List<Slot>>()
         fun next(i: Int) {
             if (i >= order.size || ((best?.size ?: 0) >= 3 && bestFit)) {
                 last = bestLines
+                // 对字形的识别器为准，别的识别器多认出的格子补进来
+                best?.let { b0 ->
+                    val have = b0.flatMap { s -> s.days.map { d -> d to s.from } }.toMutableSet()
+                    val add = others.flatten().filter { s -> s.days.none { d -> (d to s.from) in have } }
+                        .distinctBy { s -> s.days.first() to s.from }
+                    if (add.isNotEmpty()) best = (b0 + add).sortedWith(compareBy({ it.days.first() }, { it.from }))
+                }
                 if (best.isNullOrEmpty()) done(null, err ?: tr("没认出课程，换一张更清楚、带星期表头的截图试试")) else done(best, null)
                 return
             }
@@ -130,7 +138,9 @@ object Ocr {
                     val want = when { Regex("[\\u3040-\\u30FF]|曜|\\d限|講義|号館|号室").containsMatchIn(all) -> "ja"; Regex("[\\uAC00-\\uD7AF]").containsMatchIn(all) -> "ko"; else -> "zh" }
                     val fit = order[i] == want
                     val n = r.size; val b = best?.size ?: 0
-                    if (n > b || (n == b && n > 0 && fit && !bestFit)) { best = r; bestLines = ls; bestFit = fit }
+                    if (fit && n > 0 && (!bestFit || n > b)) { best?.let { others += it }; best = r; bestLines = ls; bestFit = true }
+                    else if (!bestFit && n > b) { best?.let { others += it }; best = r; bestLines = ls }
+                    else if (n > 0) others += r
                 } catch (x: Exception) { Diag.log("课表识别 ${order[i]}：${x.message}"); if (err == null) err = tr("没找到「周一、周二…」那一行，换一张带星期表头的截图试试") }
                 client.close(); next(i + 1)
             }.addOnFailureListener { client.close(); if (err == null) err = tr("识别失败：{0}", it.message ?: ""); next(i + 1) }
@@ -235,7 +245,9 @@ object Ocr {
         val parts = ArrayList<String>()
         for (raw0 in ls) {
             val raw = raw0.trim().let { r -> val i = r.indexOfAny(charArrayOf('@', '＠')); if (i > 0) r.substring(0, i) else r }
-            val t = raw.trim().trimStart('@', '＠')
+            var t = raw.trim().trimStart('@', '＠')
+            // 课名和教室挤在同一行（如「線形代数 講義室3」）：从教室那里截断
+            NOISE.find(t)?.let { m -> if (m.range.first >= 2 && !raw0.trim().startsWith("@")) t = t.substring(0, m.range.first).trim() }
             if (t.isEmpty()) continue
             val noise = raw0.trim().startsWith("@") || raw0.trim().startsWith("＠") || NOISE.containsMatchIn(t)
             if (noise) { if (parts.isNotEmpty()) break else continue }
