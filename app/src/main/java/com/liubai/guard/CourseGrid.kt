@@ -525,7 +525,7 @@ private fun CourseBlock(k: Block, col: Pair<Color, Color>, m: Modifier, onClick:
         if (k.on) Box(Modifier.fillMaxHeight().width(3.dp).background(fg.copy(alpha = 0.35f)))
         val tc = if (k.on) fg else C.Faint
         val tag: String? = when {
-            !k.on -> tr("非本周")
+            !k.on -> if (Tr.cjk) tr("非本周") else tr("非本周（短）")
             k.s.level == 2 && span >= 2 -> if (Tr.cjk) Slot.LEVELS[2] else "!"
             else -> null
         }
@@ -697,6 +697,8 @@ fun TermDateDialog(title: String, sub: String, initial: Long, onPick: (Long) -> 
             colors = DatePickerDefaults.colors(containerColor = C.Card),
             confirmButton = { TextButton({ st.selectedDateMillis?.let { onPick(Math.floorDiv(it, 86_400_000L)) } ?: onClose() }) { Text(tr("确定"), color = C.ClayDeep, fontWeight = FontWeight.SemiBold) } },
             dismissButton = { TextButton(onClose) { Text(tr("取消"), color = C.Soft) } }) {
+            // 对话框是单独的窗口，会重新提供 LocalConfiguration，所以在里面再按界面语言覆盖一次
+            CompositionLocalProvider(LocalConfiguration provides android.content.res.Configuration(LocalConfiguration.current).apply { setLocale(Tr.locale()) }) {
             DatePicker(st, title = {
                 Column(Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)) {
                     Text(title, fontSize = 14.sp, color = C.Soft)
@@ -704,6 +706,7 @@ fun TermDateDialog(title: String, sub: String, initial: Long, onPick: (Long) -> 
                 }
             }, colors = DatePickerDefaults.colors(containerColor = C.Card, selectedDayContainerColor = C.Clay, todayDateBorderColor = C.Clay, todayContentColor = C.ClayDeep,
                 selectedYearContainerColor = C.Clay))
+            }
         }
     }
 }
