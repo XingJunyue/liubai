@@ -16,8 +16,13 @@ object TestHooks {
         i ?: return
         i.getStringExtra("setlang")?.let { Log.i("LiubaiTest", "lang -> $it"); Tr.set(c, it); return }
         if (i.getBooleanExtra("seed", false)) seed(c)
+        // 教程：--ez notour true 全部当看过（冒烟测试不被挡住）；--es tour first|new 直接弹出来截图
+        if (i.getBooleanExtra("notour", false)) Tour.skipAll(c)
+        i.getStringExtra("tour")?.let { Tour.show.value = it }
         // 课表网页导入：--es jwkind qz --es jwurl file:///android_asset/jwtest.html --ez jwauto true
         i.getStringExtra("jwkind")?.let { TimetableTest.webKind = it; TimetableTest.webUrl = i.getStringExtra("jwurl"); TimetableTest.autoImport = i.getBooleanExtra("jwauto", false) }
+        // 教务导入页搜索框预填：--es jwq 大连
+        i.getStringExtra("jwq")?.let { TimetableTest.query = it; TimetableTest.webKind = null; TimetableTest.webUrl = null }
         i.getStringExtra("ocr")?.let { name ->
             val f = File(c.getExternalFilesDir(null), name)
             Log.i("LiubaiTest", "OCR start ${f.absolutePath} exists=${f.exists()}")
@@ -30,7 +35,7 @@ object TestHooks {
     }
 
     private fun seed(c: Context) {
-        Unlock.setGuided(c); Store.setIntroDone(c)
+        Unlock.setGuided(c); Store.setIntroDone(c); Tour.skipAll(c)
         if (Store.desired(c).isEmpty()) {
             Store.setDesired(c, mapOf("com.android.chrome" to 30, "com.google.android.youtube" to 20))
             Store.setExtra(c, "com.android.chrome", Extra(delay = 5, grow = true, opens = 5, ask = true, again = 10))

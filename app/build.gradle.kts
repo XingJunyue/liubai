@@ -15,6 +15,8 @@ android {
         // 测试机（模拟器）是 x86：传 -PallAbi 时不过滤
         if (!project.hasProperty("allAbi")) ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         buildConfigField("boolean", "PLAY", "false")
+        // 预览版（非 main 分支的 CI 构建传 -Ppreview）：完全关掉应用内更新，不查、不提示、不下载正式版
+        buildConfigField("boolean", "PREVIEW", if (project.hasProperty("preview")) "true" else "false")
     }
     flavorDimensions += "ch"
     productFlavors {

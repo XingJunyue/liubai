@@ -12,6 +12,12 @@ shot() {
   adb exec-out screencap -p > "shots/$1.png"
 }
 go() { adb shell am start -n $P/.MainActivity --es open "$@" > /dev/null; }
+# 按屏幕上的文字点（uiautomator 找控件位置），找不到就什么也不做
+tapText() {
+  adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1
+  local b; b=$(adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -F "text=\"$1" | head -1 | sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p')
+  if [ -n "$b" ]; then local x1 y1 x2 y2; read -r x1 y1 x2 y2 <<< "$b"; adb shell input tap $(( (x1+x2)/2 )) $(( (y1+y2)/2 )); else echo "tapText: '$1' not found"; fi
+}
 crashed() { adb logcat -d -b crash | grep -q "$P" ; }
 
 # 等系统完全起来，关掉错误对话框（模拟器慢，桌面常报「没有响应」盖住截图）
@@ -57,6 +63,22 @@ adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwu
 go table:0; sleep 1
 adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwurl file:///android_asset/jwtest.html --ez jwauto true > /dev/null; shot 07-web-preview 10
 adb logcat -d | grep -i "chromium\|LiubaiJw" | tail -20 > shots/web-log.txt
+# 教务导入：按学校名搜索（预填搜索词）
+go table:0; sleep 1
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwq 大连 > /dev/null; shot 07-jw-search 5
+go table:0; sleep 1
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwq 东北林业 > /dev/null; shot 07-jw-search-2 5
+tapText 东北林业大学; shot 07-jw-search-pick 8
+adb shell am start -n $P/.MainActivity --es jwq "" > /dev/null
+go table:0; sleep 1
+# 新手教程 / 新功能指引（弹出来截图，再跳过）
+go home; sleep 2
+adb shell am start -n $P/.MainActivity --es tour first > /dev/null; shot 08-tour-first-1 3
+for k in 2 3 4 5 6; do tapText 下一步; shot 08-tour-first-$k 2; done
+adb shell input keyevent KEYCODE_BACK; sleep 1
+adb shell am start -n $P/.MainActivity --es tour new > /dev/null; shot 08-tour-new 3
+adb shell input keyevent KEYCODE_BACK; adb shell input keyevent KEYCODE_BACK; sleep 1
+go settings; shot 08-settings-tour 4
 go table:0; sleep 1
 adb shell am start -n $P/.MainActivity --es open focus; sleep 3
 adb shell input tap 960 190; shot 02-focus-set 3

@@ -11,6 +11,12 @@ import org.jsoup.nodes.TextNode
  * 教务系统课表解析：输入网页 HTML 或接口返回的 JSON 字符串，输出课程列表。
  * 全是纯函数，不碰 Android，单元测试直接喂样例就行。
  * 各家教务的接口和页面结构参考了公开资料和 NEU 教务课表导出脚本（greasyfork 573005, MIT），解析代码是自己写的。
+ *
+ * jw-adapters 分支新增的解析逻辑移植自（均为 MIT，见 THIRD_PARTY_NOTICES.md）：
+ *  - ShiGuangSchedule/shiguang_warehouse（拾光课程表适配仓库，© 2025 星河欲转）：
+ *    正方 HTML 网格/列表视图、新 URP 页面、青果「周次[节次]」、超星 sdpkkbList 接口、强智节次标签与单双周字段、连排合并
+ *  - baoozak/timetable（© 2026 baoozak）：正方紧凑节次「0102」、正方备用接口 cxXsgrkb、南软 tb_kcb 表格与 <hr> 分隔、学校列表
+ * 只读过、没有复制 GPL 项目的代码。
  */
 data class JwCourse(
     val name: String, val day: Int, val start: Int, val end: Int,
@@ -27,10 +33,10 @@ object Jw {
         Kind("urpnew", "新 URP", "student/courseSelect"),
         Kind("urp", "URP（旧）", "xkAction"),
         Kind("eams", "树维 eams", "courseTableForStd"),
-        Kind("kingo", "青果", "", true),
+        Kind("kingo", "青果", "jwweb · KINGOSOFT"),
         Kind("cf", "乘方", "", true),
         Kind("nr", "南软", "", true),
-        Kind("cx", "超星", "", true),
+        Kind("cx", "超星", "admin/pkgl · sdpkkbList"),
         Kind("umooc", "优慕课", "", true),
         Kind("generic", "其他：从当前页面识别", "找页面里最大的课表表格"),
     )
@@ -81,6 +87,12 @@ object Jw {
 
     /** 「第1,2节」「01-02节」「1-2」「3」→ 起止节次。 */
     fun sections(s: String): Pair<Int, Int>? {
+        // 正方有时给紧凑写法「0102」「030405」：每两位一节（baoozak/timetable, MIT）
+        val t = s.trim()
+        if (Regex("^\\d{4,}$").matches(t) && t.length % 2 == 0) {
+            val n = t.chunked(2).map { it.toInt() }.filter { it in 1..20 }
+            if (n.isNotEmpty()) return n.min() to n.max()
+        }
         val n = Regex("\\d+").findAll(s).map { it.value.toInt() }.filter { it in 1..20 }.toList()
         if (n.isEmpty()) return null
         return n.min() to n.max()
@@ -141,16 +153,20 @@ object Jw {
 
     // ---------------- 正方 ----------------
 
+    /** 正方课名后面常带的标记：★ 理论课、● 实验等。 */
+    private val ZF_MARK = Regex("[●★○◆☆]")
+
     /** 新版正方 xskbcx_cxXsKb.html 返回的 JSON（kbList）。 */
     fun zfJson(json: String): List<JwCourse> {
-        val a = JSONObject(json).optJSONArray("kbList") ?: return emptyList()
+        val t = json.trim()
+        val a = if (t.startsWith("[")) JSONArray(t) else JSONObject(t).let { it.optJSONArray("kbList") ?: it.optJSONObject("data")?.optJSONArray("kbList") } ?: return emptyList()
         val out = ArrayList<JwCourse>()
         for (i in 0 until a.length()) {
             val o = a.optJSONObject(i) ?: continue
-            val name = o.optString("kcmc").trim().takeIf { it.isNotEmpty() } ?: continue
+            val name = o.optString("kcmc").replace(ZF_MARK, "").trim().takeIf { it.isNotEmpty() } ?: continue
             val day = o.optString("xqj").trim().toIntOrNull()?.takeIf { it in 1..7 } ?: continue
-            val (s, e) = sections(o.optString("jcs", o.optString("jc"))) ?: continue
-            out += JwCourse(name, day, s, e, weeks(o.optString("zcd")), o.optString("xm").trim(), o.optString("cdmc").trim())
+            val (s, e) = sections(o.optString("jcs").ifBlank { o.optString("jc") }) ?: continue
+            out += JwCourse(name, day, s, e, weeks(o.optString("zcd")), o.optString("xm").trim(), o.optString("cdmc").ifBlank { o.optString("cddm") }.trim())
         }
         return out
     }
@@ -199,6 +215,8 @@ object Jw {
             val cells = r.children()
             if (cells.none { it.selectFirst("div.kbcontent") != null }) { if (cells.size > 1) bigIdx++; continue }
             bigIdx++
+            // 行标签（第一格）写了节次就用它，比「第几大节×2」准（拾光 CSU/csu.js）
+            val rowSec = cells.firstOrNull()?.takeIf { it.selectFirst("div.kbcontent") == null }?.let { JwA.qzRowSections(it.text()) }
             cells.forEachIndexed { ci, td ->
                 val div = td.selectFirst("div.kbcontent") ?: return@forEachIndexed
                 val day = colDay[ci] ?: (ci).takeIf { colDay.isEmpty() && it in 1..7 } ?: return@forEachIndexed
@@ -212,12 +230,16 @@ object Jw {
                     val teacher = frag.selectFirst("font[title~=老师|教师]")?.text()?.trim() ?: ""
                     val wk = frag.selectFirst("font[title~=周次]")?.text()?.trim() ?: ""
                     val room = frag.selectFirst("font[title~=教室|地点]")?.text()?.trim() ?: ""
-                    val sec = Regex("\\[([\\d\\-]+)节]").find(wk)?.let { sections(it.groupValues[1]) } ?: ((bigIdx * 2 - 1) to (bigIdx * 2))
-                    out += JwCourse(name, day, sec.first, sec.second, weeks(wk.substringBefore('[')), teacher, room)
+                    val sd = frag.selectFirst("font[title~=单双周]")?.text()?.trim() ?: ""
+                    val sec = Regex("\\[([\\d\\-]+)节]").find(wk)?.let { sections(it.groupValues[1]) } ?: rowSec ?: ((bigIdx * 2 - 1) to (bigIdx * 2))
+                    var w = weeks(wk.substringBefore('['))
+                    if (w.isNotEmpty() && sd.contains("单")) w = w.filter { it % 2 == 1 }.toSet()
+                    if (w.isNotEmpty() && sd.contains("双")) w = w.filter { it % 2 == 0 }.toSet()
+                    out += JwCourse(name, day, sec.first, sec.second, w, JwA.cleanTeacher(teacher), room)
                 }
             }
         }
-        return out
+        return JwA.mergeAdjacent(out)
     }
 
     // ---------------- 新 URP ----------------
@@ -437,6 +459,8 @@ object Jw {
                 is TextNode -> b.append(n.text())
                 is Element -> {
                     if (n.tagName() == "br") { br(); return }
+                    // <hr> 隔开同一格里的几门课（南软等，baoozak/timetable）：记成分隔行，cellCourses 按它拆
+                    if (n.tagName() == "hr") { br(); out += "-----"; return }
                     if (n.attr("style").replace(" ", "").contains("display:none")) return
                     val block = n.isBlock || n.tagName() in setOf("p", "div", "li", "tr")
                     if (block) br()
@@ -463,15 +487,24 @@ object Jw {
         val json = p.optString("json", "")
         fun tryJ(f: (String) -> List<JwCourse>) = if (json.isBlank()) emptyList() else try { f(json) } catch (x: Exception) { emptyList() }
         fun tryH(f: (String) -> List<JwCourse>) = htmls.map { h -> try { f(h) } catch (x: Exception) { emptyList() } }.maxByOrNull { it.size } ?: emptyList()
+        // 金智（东大）这条路和以前完全一样，不动
+        if (kind == "wisedu" || kind == "neu")
+            return clean(tryJ(::wisedu).ifEmpty { tryH(::qz).ifEmpty { tryH(::eams) }.ifEmpty { tryH(::table) } })
         val r = when (kind) {
-            "wisedu", "neu" -> tryJ(::wisedu)
-            "zf" -> tryJ(::zfJson).ifEmpty { tryH(::zfOld) }
+            "zf" -> tryJ(::zfJson).ifEmpty { tryH(JwA::zfHtml) }.ifEmpty { tryH(::zfOld) }
             "qz" -> tryH(::qz)
-            "urpnew" -> tryJ(::urpNew)
+            "urpnew" -> tryJ(::urpNew).ifEmpty { tryH(JwA::urpNewHtml) }
+            "urp" -> tryH(JwA::urpList).ifEmpty { tryH(JwA::urpNewHtml) }
             "eams" -> tryH(::eams)
+            "kingo" -> tryH(JwA::kingo)
+            "cx" -> tryJ(JwA::cx)
+            "nr" -> tryH(JwA::nr)
             else -> emptyList()
         }
-        return clean(r.ifEmpty { tryH(::qz).ifEmpty { tryH(::eams) }.ifEmpty { tryH(::table) } })
+        return clean(r.ifEmpty {
+            tryH(::qz).ifEmpty { tryH(::eams) }.ifEmpty { tryH(JwA::zfHtml) }.ifEmpty { tryH(JwA::urpNewHtml) }
+                .ifEmpty { tryH(JwA::urpList) }.ifEmpty { tryH(JwA::kingo) }.ifEmpty { tryH(::table) }
+        })
     }
 
     /** 去重；同一门课同一时间同一教室老师的多条合并周次。 */

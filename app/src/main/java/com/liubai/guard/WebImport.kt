@@ -53,6 +53,12 @@ private const val NEU_VPN = "https://webvpn.neu.edu.cn/"
 
 private fun prefs(c: Context) = c.getSharedPreferences("jwimport", Context.MODE_PRIVATE)
 
+@Volatile private var schoolCache: List<School>? = null
+/** assets/schools.tsv（开源学校列表，见 Schools.kt / THIRD_PARTY_NOTICES.md）。 */
+fun schoolsOf(c: Context): List<School> = schoolCache ?: try {
+    Schools.parse(c.assets.open("schools.tsv").bufferedReader().use { it.readText() }).also { schoolCache = it }
+} catch (x: Exception) { emptyList() }
+
 private class Bridge(val cb: (String) -> Unit) {
     @JavascriptInterface fun post(s: String) { Handler(Looper.getMainLooper()).post { cb(s) } }
 }
@@ -68,14 +74,17 @@ fun JwImportScreen(onClose: () -> Unit, onParsed: (List<JwCourse>) -> Unit) {
         JwPicker(onClose) { k, u -> kind = k; url = u }
     } else {
         BackHandler { kind = null; TimetableTest.webKind = null; TimetableTest.webUrl = null }
-        JwWeb(k0, url, onBack = { kind = null; TimetableTest.webKind = null; TimetableTest.webUrl = null }, onParsed = onParsed)
+        JwWeb(k0, url, onBack = { kind = null; TimetableTest.webKind = null; TimetableTest.webUrl = null }, onParsed = onParsed,
+            onKind = { kind = it })
     }
 }
 
 @Composable
 private fun JwPicker(onClose: () -> Unit, onPick: (String, String) -> Unit) {
     val c = LocalContext.current
-    var q by remember { mutableStateOf("") }
+    var q by remember { mutableStateOf(TimetableTest.query ?: "") }
+    val schools = remember { schoolsOf(c) }
+    val found = remember(q) { Schools.search(schools, q) }
     Column(Modifier.fillMaxSize().background(C.Cream)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("‹", fontSize = 28.sp, color = C.Ink, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(horizontal = 14.dp))
@@ -96,6 +105,31 @@ private fun JwPicker(onClose: () -> Unit, onPick: (String, String) -> Unit) {
                     Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Pill(tr("校园网直连"), true, Modifier.weight(1f)) { onPick("neu", NEU) }
                         Pill(tr("校外 WebVPN"), false, Modifier.weight(1f)) { onPick("neu", NEU_VPN) }
+                    }
+                }
+            }
+            if (t.isEmpty() && schools.isNotEmpty()) Text(tr("输入学校名搜索，已收录 {0} 所学校的教务入口", schools.map { it.name }.distinct().size), fontSize = 12.sp, color = C.Faint,
+                modifier = Modifier.padding(top = 12.dp, start = 4.dp))
+            if (found.isNotEmpty()) {
+                Text(tr("搜到的学校"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 2.dp, start = 4.dp))
+                Text(tr("学校列表来自开源项目，网址和类型不一定准；进去后可以改网址、点上方类型名换解析方式。"), fontSize = 11.sp, color = C.Faint, lineHeight = 16.sp,
+                    modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card)) {
+                    found.forEachIndexed { i, sc ->
+                        if (i > 0) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(C.Track.copy(alpha = 0.7f)))
+                        val kk = Schools.kindOf(sc)
+                        val kn = Jw.KINDS.firstOrNull { it.id == kk }?.name ?: kk
+                        Row(Modifier.fillMaxWidth().clickable { onPick(kk, sc.url) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(sc.name, fontSize = 15.sp, color = C.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                    if (sc.src == "s") Text(tr("有人适配过"), fontSize = 10.sp, color = C.SageInk,
+                                        modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(6.dp)).background(C.Sand).padding(horizontal = 5.dp, vertical = 1.dp))
+                                }
+                                Text(tr(kn) + " · " + (android.net.Uri.parse(sc.url).host ?: sc.url), fontSize = 11.sp, color = C.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            Text("›", fontSize = 18.sp, color = C.Faint)
+                        }
                     }
                 }
             }
@@ -137,7 +171,8 @@ private fun Pill(t: String, main: Boolean, m: Modifier, onClick: () -> Unit) {
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (List<JwCourse>) -> Unit) {
+private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (List<JwCourse>) -> Unit, onKind: (String) -> Unit = {}) {
+    var pickKind by remember { mutableStateOf(false) }
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     var addr by remember { mutableStateOf(start) }
@@ -191,7 +226,8 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                 modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(10.dp)).clickable { go(addr) }.padding(horizontal = 8.dp, vertical = 8.dp))
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(kname, fontSize = 12.sp, color = C.Soft, fontWeight = FontWeight.SemiBold)
+            Text(kname + if (kind == "neu") "" else " ▾", fontSize = 12.sp, color = C.Soft, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = kind != "neu") { pickKind = true }.padding(horizontal = 4.dp, vertical = 3.dp))
             if (kind == "neu") {
                 Spacer(Modifier.width(8.dp))
                 Text(if (vpn) tr("WebVPN 已开") else tr("切到 WebVPN（校外）"), fontSize = 11.sp, color = if (vpn) Color.White else C.Ink, maxLines = 1,
@@ -258,6 +294,17 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
             }
         }
     }
+    if (pickKind) AlertDialog(onDismissRequest = { pickKind = false }, containerColor = C.Card,
+        title = { Text(tr("换教务类型"), color = C.Ink) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(tr("导入不出来时换一个试试，网页和登录状态不变"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(bottom = 8.dp))
+                for (k in Jw.KINDS) Text(tr(k.name) + if (k.exp) " · " + tr("实验性") else "", fontSize = 15.sp,
+                    color = if (k.id == kind) C.ClayDeep else C.Ink, fontWeight = if (k.id == kind) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { pickKind = false; err = null; onKind(k.id) }.padding(vertical = 11.dp, horizontal = 4.dp))
+            }
+        },
+        confirmButton = {}, dismissButton = { TextButton({ pickKind = false }) { Text(tr("取消"), color = C.Soft) } })
     campuses?.let { cs ->
         AlertDialog(onDismissRequest = { campuses = null }, containerColor = C.Card,
             title = { Text(tr("选择校区"), color = C.Ink) },
@@ -291,6 +338,7 @@ function htmls(){return docs().map(d=>{try{return d.documentElement.outerHTML}ca
 function hrefs(){const out=[];for(const d of docs()){try{out.push(d.location.href)}catch(e){}try{for(const e of d.querySelectorAll('a[href],iframe[src],frame[src]'))out.push(e.href||e.src)}catch(e){}}return out;}
 function base(marker){for(const h of hrefs()){const i=h.indexOf(marker);if(i>=0)return h.substring(0,i);}return null;}
 async function req(url,body){const o={method:body==null?'GET':'POST',credentials:'include'};if(body!=null){o.headers={'x-requested-with':'XMLHttpRequest','content-type':'application/x-www-form-urlencoded; charset=UTF-8'};o.body=body;}const r=await fetch(url,o);if(!r.ok)throw new Error('HTTP '+r.status);return await r.text();}
+async function reqDecoded(url){const r=await fetch(url,{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);const buf=await r.arrayBuffer();const ct=(r.headers.get('content-type')||'').toLowerCase();let cs=(ct.match(/charset=([\w-]+)/)||[])[1];if(!cs){const t=new TextDecoder('utf-8').decode(buf);if(t.indexOf('\ufffd')<0)return t;cs='gbk';}try{return new TextDecoder(cs).decode(buf);}catch(e){return new TextDecoder('utf-8').decode(buf);}}
 function enc(o){return Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(o[k])).join('&');}
 function val(id){for(const d of docs()){try{const e=d.getElementById(id);if(e&&e.value)return e.value;}catch(x){}}return null;}
 try{
@@ -313,8 +361,27 @@ try{
   let b=base('/jwglxt/'); b=b!=null?b+'/jwglxt':(base('/kbcx/')||base('/xtgl/')||location.origin);
   const now=new Date(); const y=now.getFullYear(), m=now.getMonth()+1;
   const xnm=val('xnm')||String(m>=8?y:y-1); const xqm=val('xqm')||((m>=8||m<=1)?'3':'12');
+  const ok=t=>{try{const j=JSON.parse(t);return ((j.kbList||(j.data||{}).kbList)||[]).length>0;}catch(e){return false;}};
   let json=null; try{json=await req(b+'/kbcx/xskbcx_cxXsKb.html?gnmkdm=N2151',enc({xnm:xnm,xqm:xqm,kzlx:'ck'}));}catch(e){}
+  // 有的学校只开了另一个接口（baoozak/timetable zhengfang_new.js）
+  if(!json||!ok(json)){try{const t=await req(b+'/kbcx/xskbcx_cxXsgrkb.html?gnmkdm=N253508',enc({xnm:xnm,xqm:xqm}));if(ok(t))json=t;}catch(e){}}
   P({ok:true,kind:K,json:json,html:htmls()}); return;
+ }
+ if(K==='cx'){
+  // 超星：页面上的 xhid / xqdm / 学期下拉框，没有就去课表页拿，再请求 sdpkkbList（shiguang_warehouse chaoxing.js）
+  const o=base('/admin/')||location.origin; const pick=(d,id)=>{try{const e=d.getElementById(id);return (e&&e.value)||null;}catch(x){return null;}};
+  let xhid=null,xqdm=null,xnxq=null;
+  for(const d of docs()){xhid=xhid||pick(d,'xhid');xqdm=xqdm||pick(d,'xqdm');xnxq=xnxq||pick(d,'xnxq1');}
+  if(!xhid||!xqdm){try{const d=new DOMParser().parseFromString(await req(o+'/admin/pkgl/xskb/queryKbForXsd',null),'text/html');xhid=xhid||pick(d,'xhid');xqdm=xqdm||pick(d,'xqdm');xnxq=xnxq||pick(d,'xnxq1');}catch(e){}}
+  if(!xnxq){const n=new Date(),y=n.getFullYear(),m=n.getMonth()+1;xnxq=m>=8?y+'-'+(y+1)+'-1':(m<=1?(y-1)+'-'+y+'-1':(y-1)+'-'+y+'-2');}
+  let json=null; if(xhid&&xqdm){try{json=await req(o+'/admin/xsd/pkgl/xskb/sdpkkbList?'+enc({xnxq:xnxq,xhid:xhid,xqdm:xqdm,xskbxslx:'0'}),null);}catch(e){}}
+  P({ok:true,kind:K,json:json,html:htmls()}); return;
+ }
+ if(K==='urp'){
+  // 旧 URP：当前页没有选课列表就去取「本学期课表」（页面常是 GBK）
+  const hs=htmls();
+  if(!hs.some(h=>h.indexOf('课程名')>=0)){ const b=base('/xkAction.do')||base('/menu/')||location.origin; try{hs.push(await reqDecoded(b+'/xkAction.do?actionType=6'));}catch(e){} }
+  P({ok:true,kind:K,html:hs}); return;
  }
  if(K==='qz'){
   const hs=htmls();

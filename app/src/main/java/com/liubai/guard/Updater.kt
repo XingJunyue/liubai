@@ -36,6 +36,9 @@ object Updater {
     /** 直连优先，失败再走国内加速镜像（只代理 github.com 的下载链接）。 */
     val MIRRORS = listOf("", "https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
     @Volatile var lastError = ""
+
+    /** 应用内更新开不开：Play 版由商店更新，预览版（分支 CI 构建）一律不查、不提示、不下载。 */
+    fun enabled(play: Boolean = BuildConfig.PLAY, preview: Boolean = BuildConfig.PREVIEW) = !play && !preview
     @Volatile private var mirror = ""
 
     private fun open(url: String, timeout: Int = 8_000): HttpURLConnection {
@@ -50,6 +53,7 @@ object Updater {
      * 谁先回来就先用谁；第一个结果到了之后再多等 1.5 秒，让别的来源有机会给出更新的版本号，最多等 10 秒。
      */
     fun latest(): Release? {
+        if (!enabled()) { lastError = "preview"; return null }
         lastError = ""
         val bust = "?t=" + System.currentTimeMillis()
         val lock = Object()
@@ -124,6 +128,7 @@ object Updater {
     private fun apk(code: Int) = "https://github.com/$REPO/releases/download/build-$code/liubai-1.$code.apk"
 
     fun download(c: Context, url: String, progress: (Float) -> Unit): File {
+        if (!enabled()) throw IllegalStateException("updater disabled in preview build")
         val order = listOf(mirror) + MIRRORS.filter { it != mirror }
         var last: Exception? = null
         val want = Regex("build-(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
@@ -187,6 +192,7 @@ object Updater {
     }
 
     fun install(c: Context, f: File) {
+        if (!enabled()) return
         arm(c)
         val uri = FileProvider.getUriForFile(c, "${c.packageName}.files", f)
         c.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
@@ -212,7 +218,7 @@ fun AboutScreen() {
         }
     }
     // 一打开就查，不用再点一次（Play 版由商店更新，不查）
-    LaunchedEffect(Unit) { if (!BuildConfig.PLAY) check() }
+    LaunchedEffect(Unit) { if (Updater.enabled()) check() }
     fun get() {
         val r = rel ?: return
         if (!Updater.canInstall(c)) {
@@ -241,7 +247,8 @@ fun AboutScreen() {
                 Text(tr("版本 {0}", BuildConfig.VERSION_NAME), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
             }
             if (BuildConfig.PLAY) Text(tr("在 Google Play 里更新"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).align(Alignment.CenterHorizontally))
-            if (!BuildConfig.PLAY) {
+            else if (BuildConfig.PREVIEW) Text(tr("预览版，不检查更新"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).align(Alignment.CenterHorizontally))
+            if (Updater.enabled()) {
             Spacer(Modifier.height(18.dp))
             val r = rel
             when (state) {
@@ -285,6 +292,7 @@ fun AboutScreen() {
 /** 打开留白时自动查一次，有新版本就弹窗；可以「以后再说」，3 小时内不再打扰。 */
 @Composable
 fun UpdatePrompt() {
+    if (!Updater.enabled()) return
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     val pr = remember { c.getSharedPreferences("upd", Context.MODE_PRIVATE) }

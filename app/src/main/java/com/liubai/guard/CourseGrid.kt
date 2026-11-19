@@ -90,6 +90,8 @@ object TimetableTest {
     @Volatile var webUrl: String? = null
     @Volatile var webKind: String? = null
     @Volatile var autoImport = false
+    /** 教务导入页搜索框预填（冒烟测试截学校搜索用）。 */
+    @Volatile var query: String? = null
 }
 
 private class Block(val s: Slot, val d: Int, val a: Int, val b: Int, val on: Boolean)

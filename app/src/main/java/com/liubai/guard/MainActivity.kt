@@ -58,7 +58,8 @@ class MainActivity : ComponentActivity() {
         Diag.init(this)
         super.onCreate(b)
         if (BuildConfig.DEBUG) TestHooks.run(this, intent)
-        setContent { LiubaiTheme { App() } }
+        Tour.init(this)
+        setContent { LiubaiTheme { Box(Modifier.fillMaxSize()) { App(); TourHost() } } }
     }
 
     override fun onNewIntent(i: Intent) {
@@ -91,7 +92,9 @@ fun App() {
         if (req != null) { if (Unlock.guided(ctx)) { Nav.sub = req.substringAfter(':', "0").toIntOrNull() ?: 0; screen = req.substringBefore(':'); drawer.close() }; Nav.open.value = null }
     }
     BackHandler(enabled = drawer.isOpen) { scope.launch { drawer.close() } }
-    if (screen != "setup" && screen != "picker" && screen != "intro" && !BuildConfig.PLAY) UpdatePrompt()
+    if (screen != "setup" && screen != "picker" && screen != "intro" && Updater.enabled()) UpdatePrompt()
+    // 新手引导 / 新功能指引：到了主界面再弹，不挡首次的权限引导和专注
+    LaunchedEffect(screen) { if (screen !in setOf("setup", "picker", "intro", "focus")) Tour.check(ctx) }
     ConsentDialog()
     BackHandler(enabled = !drawer.isOpen && screen != "home") { screen = if (screen == "setup") "picker" else "home" }
     val go: (String) -> Unit = { screen = it; scope.launch { drawer.close() } }
@@ -125,7 +128,7 @@ fun App() {
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(tr("版本 {0}", BuildConfig.VERSION_NAME), fontSize = 12.sp, color = C.Faint)
-                        Text(if (BuildConfig.PLAY) tr("关于") else Look.label("menu_update", tr("检查更新")), fontSize = 12.sp, color = C.ClayDeep,
+                        Text(if (!Updater.enabled()) tr("关于") else Look.label("menu_update", tr("检查更新")), fontSize = 12.sp, color = C.ClayDeep,
                             modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { go("about") }.padding(horizontal = 8.dp, vertical = 6.dp))
                         Spacer(Modifier.weight(1f))
                         Text(

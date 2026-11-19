@@ -50,6 +50,13 @@ fun SettingsScreen(poemsOn: Boolean, onPoems: (Boolean) -> Unit) {
         }
         Spacer(Modifier.height(18.dp))
 
+        SectionTitle(tr("新手教程"))
+        SoftCard(Modifier.fillMaxWidth()) {
+            StatusRow(tr("新手教程"), tr("再看一遍专注、管控、课表和教务导入怎么用"), null, tr("打开 ›")) { Tour.show.value = "first" }
+            StatusRow(tr("这个版本的新功能"), tr("看看这次更新加了什么"), null, tr("打开 ›")) { Tour.show.value = "new" }
+        }
+        Spacer(Modifier.height(18.dp))
+
         SectionTitle(tr("守护需要的权限"))
         SoftCard(Modifier.fillMaxWidth()) {
             StatusRow(tr("无障碍"), tr("知道你此刻在用什么，到点才能拦住"), acc) { Consent.openA11y(c) }
@@ -98,7 +105,7 @@ fun SettingsScreen(poemsOn: Boolean, onPoems: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun StatusRow(label: String, sub: String, ok: Boolean?, onClick: (() -> Unit)?) {
+private fun StatusRow(label: String, sub: String, ok: Boolean?, act: String? = null, onClick: (() -> Unit)? = null) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
@@ -113,7 +120,7 @@ private fun StatusRow(label: String, sub: String, ok: Boolean?, onClick: (() -> 
         when (ok) {
             true -> Text(tr("已开启"), fontSize = 13.sp, color = C.SageInk, fontWeight = FontWeight.SemiBold)
             false -> Text(tr("去开启 ›"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold)
-            null -> Text(tr("去设置 ›"), fontSize = 13.sp, color = C.Soft)
+            null -> Text(act ?: tr("去设置 ›"), fontSize = 13.sp, color = C.Soft)
         }
     }
 }
