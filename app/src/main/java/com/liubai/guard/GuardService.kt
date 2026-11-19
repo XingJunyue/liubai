@@ -623,7 +623,10 @@ class GuardService : AccessibilityService() {
                 continue
             }
             // 只看系统的设置 / 安全中心 / 安装器 / 应用商店；聊天、浏览器里出现这些字不算
-            if (!sensitive(pk) && "market" !in pk && "appstore" !in pk) continue
+            val store = "market" in pk || "appstore" in pk || "vending" in pk
+            if (!sensitive(pk) && !store) continue
+            // 应用商店：搜「留白」、详情页的「卸载」按钮都不算，只挡「确定卸载留白？」这种一句话的确认框
+            if (store && !sensitive(pk)) { if (sameNode(root, label) && CANCEL.any { hasText(root, it) }) { Diag.log("挡住 $pk：${dump(root).take(160)}"); bounce(); return }; continue }
             if (!hasText(root, label)) continue
             if (adminAdd(root)) continue
             val danger = DANGER.any { hasText(root, it) } || REMOVE.any { hasText(root, it) }
