@@ -237,7 +237,7 @@ object Ocr {
     private val NOISE = Regex(
         "\\d+[-~～]\\d+(周|週|주)|第?\\d+(-\\d+)?(节|節|限)|^\\d+(周|週|주)|[A-Za-z]?\\d{3,}|教室|楼|室\\s*\\d*$|義室|老师|教师|单周|双周|\\(|（|" +
             "(?i)\\b(room|rm\\.?|hall|bldg|building|prof\\.?|dr\\.|teacher|weeks?|wk|salle|bât|amphi|raum|hörsaal|gebäude|aula|sala|edificio|semanas?|semaines?|wochen?)\\b|" +
-            "講義室|号館|号室|先生|강의실|교실|호관|교수"
+            "講義室|号館|号室|先生|강의실|교실|호관|교수|\\d+\\s*교시|(?i)period\\s*\\d+"
     )
 
     /** 从格子里的几行字里挑出课名：去掉教室、老师、周次这些。 */
