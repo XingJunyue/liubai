@@ -25,7 +25,7 @@ class JwFetchTest {
     private fun run(kind: String, cfg: JSONObject, arg: String? = null): JSONObject {
         val has = node()
         if (System.getenv("CI").isNullOrEmpty()) assumeTrue("node not installed", has) else assertTrue("CI needs node", has)
-        val js = File.createTempFile("jw", ".js").apply { writeText(jwScript(kind, arg, 7)); deleteOnExit() }
+        val js = File.createTempFile("jwscript", ".js").apply { writeText(jwScript(kind, arg, 7)); deleteOnExit() }
         val cf = File.createTempFile("cfg", ".json").apply { writeText(cfg.toString()); deleteOnExit() }
         val p = ProcessBuilder("node", File(dir, "harness.js").path, js.path, cf.path).redirectErrorStream(true).start()
         val out = p.inputStream.bufferedReader().readText()
