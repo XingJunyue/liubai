@@ -35,12 +35,12 @@ function base(marker){for(const h of hrefs()){const i=h.indexOf(marker);if(i>=0)
 function pathOf(u){try{return new URL(u,location.href).pathname}catch(e){return ''}}
 function looksLogin(t){return /type\s*=\s*["']?password/i.test(t||'')&&!/kbList|TaskActivity|kbcontent|星期一/.test(t||'');}
 async function raw(url,o){
- const c=(typeof AbortController!=='undefined')?new AbortController():null; let timer=null;
+ const c=(typeof AbortController!=='undefined')?new AbortController():null; let timer=null, timedOut=false;
  const p=pathOf(url); D.path=p; if(D.tried.length<12)D.tried.push((o.method||'GET')+' '+p);
  o.credentials='include'; if(c)o.signal=c.signal;
- const to=new Promise((_,rej)=>{timer=setTimeout(()=>{try{c&&c.abort()}catch(e){}rej(new Error('timeout '+p));},TMO);});
+ const to=new Promise((_,rej)=>{timer=setTimeout(()=>{timedOut=true;try{c&&c.abort()}catch(e){}rej(new Error('timeout '+p));},TMO);});
  try{const r=await Promise.race([fetch(url,o),to]);D.http=r.status;if(r.redirected&&/authserver|\/cas\/|login/i.test(r.url||''))D.login=true;return r;}
- catch(e){if(e&&e.name==='AbortError')throw new Error('timeout '+p);throw e;}
+ catch(e){if(timedOut||(e&&e.name==='AbortError'))throw new Error('timeout '+p);throw e;}
  finally{clearTimeout(timer);}
 }
 async function req(url,body){const o={method:body==null?'GET':'POST'};if(body!=null){o.headers={'x-requested-with':'XMLHttpRequest','content-type':'application/x-www-form-urlencoded; charset=UTF-8'};o.body=body;}const r=await raw(url,o);if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();if(looksLogin(t))D.login=true;return t;}

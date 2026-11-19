@@ -100,7 +100,7 @@ class JwFetchTest {
         val o = run("wisedu", cfg(neu, "fetch/empty_home.html", route("POST", "/jwapp/sys/jwpubapp/modules/gg/cxmrxnxq.do", hang = true), timeout = 300))
         val r = o.getJSONObject("result")
         assertFalse(r.optBoolean("ok"))
-        assertEquals("timeout", outcome(o, 0))
+        assertEquals(r.toString(), "timeout", outcome(o, 0))
         assertEquals("term", r.getJSONObject("diag").optString("step"))
     }
 
