@@ -117,6 +117,7 @@ fun App() {
                     }
                     DrawerItem(Look.label("menu_home", tr("今天")), screen == "home") { go("home") }
                     DrawerItem(Look.label("menu_groups", tr("分组额度")), screen == "groups") { go("groups") }
+                    DrawerItem(Look.label("menu_table", tr("课表")), screen == "table") { go("table") }
                     DrawerItem(Look.label("menu_time", tr("时段")), screen == "time") { go("time") }
                     DrawerItem(Look.label("menu_data", tr("数据")), screen == "weekly") { go("weekly") }
                     DrawerItem(Look.label("menu_widget", tr("小部件")), screen == "widget") { go("widget") }
@@ -146,6 +147,7 @@ fun App() {
                 "weekly" -> Paged(menu) { WeeklyScreen() }
                 "groups" -> Paged(menu) { GroupsScreen() }
                 "bed", "time" -> Paged(menu) { TimeScreen() }
+                "table" -> Box(Modifier.fillMaxSize().systemBarsPadding()) { TimetableScreen(menu) }
                 "about" -> Paged(menu) { AboutScreen() }
                 "widget" -> Paged(menu) { Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) { WidgetScreen() } }
                 "guide" -> Paged(menu) { GuideScreen() }

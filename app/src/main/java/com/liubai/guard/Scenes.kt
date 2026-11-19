@@ -213,6 +213,30 @@ object Scenes {
         return left * 60_000L - Calendar.getInstance().get(Calendar.SECOND) * 1000L
     }
 
+    // ---------- 备份 / 导出 ----------
+    class Backup(val courses: List<Slot>, val starts: List<Int>, val ends: List<Int>, val len: Int, val term: Long, val weeks: Int)
+
+    /** 课表备份：课程 + 每节课时间 + 开学日期 + 总周数。 */
+    fun backupJson(courses: List<Slot>, starts: List<Int>, ends: List<Int>, len: Int, term: Long, weeks: Int): String {
+        val a = JSONArray(); courses.forEach { a.put(it.json()) }
+        return JSONObject().put("app", "liubai-timetable").put("v", 1).put("courses", a)
+            .put("secs", JSONArray(starts)).put("secE", JSONArray(ends)).put("secLen", len).put("term", term).put("weeks", weeks).toString(2)
+    }
+    fun parseBackup(s: String): Backup? = try {
+        val j = JSONObject(s)
+        val a = j.optJSONArray("courses") ?: JSONArray()
+        fun ints(k: String) = j.optJSONArray(k)?.let { x -> (0 until x.length()).map { x.getInt(it) } } ?: emptyList()
+        Backup((0 until a.length()).map { Slot.of(a.getJSONObject(it)).copy(kind = "course") }, ints("secs"), ints("secE"),
+            j.optInt("secLen", 45), j.optLong("term", -1L), j.optInt("weeks", 20))
+    } catch (x: Exception) { null }
+    fun exportBackup(c: Context) = backupJson(desired(c).filter { it.kind == "course" }, secStarts(c), secEnds(c), secLen(c), termStart(c), totalWeeks(c))
+    /** 用备份替换课表（场景不动）。 */
+    fun applyBackup(c: Context, b: Backup) {
+        setDesired(c, desired(c).filter { it.kind != "course" } + b.courses)
+        if (b.starts.isNotEmpty()) { setSecStarts(c, b.starts); setSecLen(c, b.len); if (b.ends.size == b.starts.size) setSecEnds(c, b.ends) else resetSecEnds(c) }
+        setTermStart(c, b.term); setTotalWeeks(c, b.weeks)
+    }
+
     // ---------- 导入 ----------
     /** 从系统日历读接下来两周的日程，按「名字 + 星期 + 时间」合成每周的课。 */
     fun fromCalendar(c: Context, calId: Long): List<Slot> {

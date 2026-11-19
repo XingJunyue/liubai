@@ -4,13 +4,33 @@ set -u
 P=com.liubai.guard
 mkdir -p shots
 fail=0
-shot() { sleep "${2:-3}"; adb exec-out screencap -p > "shots/$1.png"; }
+anr() { adb shell dumpsys window 2>/dev/null | grep -qi "not responding"; }
+shot() {
+  sleep "${2:-3}"
+  # 系统的「xx 没有响应」对话框：关掉再截
+  if anr; then echo "ANR dialog before $1, closing"; adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1; sleep 2; fi
+  adb exec-out screencap -p > "shots/$1.png"
+}
+go() { adb shell am start -n $P/.MainActivity --es open "$@" > /dev/null; }
 crashed() { adb logcat -d -b crash | grep -q "$P" ; }
+
+# 等系统完全起来，关掉错误对话框（模拟器慢，桌面常报「没有响应」盖住截图）
+adb wait-for-device
+for i in $(seq 1 90); do [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ] && break; sleep 2; done
+adb shell settings put global hide_error_dialogs 1
+adb shell settings put system screen_off_timeout 1800000
+adb shell svc power stayon true
+sleep 20
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS > /dev/null 2>&1
+adb shell input keyevent KEYCODE_WAKEUP
 
 adb logcat -c
 adb install -r -g out/test-debug.apk || { echo "INSTALL FAILED"; exit 1; }
 adb shell appops set $P GET_USAGE_STATS allow
-adb shell am start -n $P/.MainActivity --ez seed true; shot 01-home 6
+adb shell am start -n $P/.MainActivity --ez seed true; sleep 6
+# 中文截图要用中文界面（模拟器系统语言是英文）
+adb shell am start -n $P/.MainActivity --es setlang zh; sleep 8
+adb shell am start -n $P/.MainActivity; shot 01-home 6
 
 for s in focus time:0 time:1 time:2 weekly groups widget look settings about guide; do
   adb shell am start -n $P/.MainActivity --es open "$s"
@@ -18,16 +38,26 @@ for s in focus time:0 time:1 time:2 weekly groups widget look settings about gui
   case "$s" in focus|time:*|weekly|settings) adb shell input swipe 540 1900 540 500 400; shot "02-${s/:/-}-b" 2;; esac
 done
 
-# 课表格子：点课块进编辑页、长按出菜单、点空格新建；专注页的设置、顺序
-adb shell am start -n $P/.MainActivity --es open time:0; sleep 3
-adb shell input swipe 540 1900 540 500 400; sleep 2
-adb shell input tap 211 1027; shot 02-course-edit 3
-adb shell input swipe 540 1900 540 600 400; shot 02-course-edit-b 2
+# 课表整页：本周、滑到下周、点课块、加课、改课、学期设置、开学日期、每节时间、导入菜单、教务列表、网页导入
+go table; shot 07-table 6
+adb shell input swipe 900 1500 150 1500 250; shot 07-table-next 3
+adb shell input swipe 150 1500 900 1500 250; sleep 2
+adb shell input tap 175 500; shot 07-tap-course 3
 adb shell input keyevent KEYCODE_BACK; sleep 1
-adb shell input swipe 211 1027 211 1027 900; shot 02-course-menu 2
-adb shell input keyevent KEYCODE_BACK; sleep 1
-adb shell input tap 960 1027; shot 02-course-add 3
-adb shell input keyevent KEYCODE_BACK; sleep 1
+go table:3; shot 07-add 3
+go table:4; shot 07-edit 3
+adb shell input swipe 540 1900 540 700 400; shot 07-edit-b 2
+go table:2; shot 07-term 3
+go table:5; shot 07-term-date 3
+go table:7; shot 07-secs 3
+go table:8; shot 07-import-menu 3
+go table:1; shot 07-import-list 3
+go table:0; sleep 1
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwurl file:///android_asset/jwtest.html > /dev/null; shot 07-web 8
+go table:0; sleep 1
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwurl file:///android_asset/jwtest.html --ez jwauto true > /dev/null; shot 07-web-preview 10
+adb logcat -d | grep -i "chromium\|LiubaiJw" | tail -20 > shots/web-log.txt
+go table:0; sleep 1
 adb shell am start -n $P/.MainActivity --es open focus; sleep 3
 adb shell input tap 960 190; shot 02-focus-set 3
 adb shell input keyevent KEYCODE_BACK; sleep 1
@@ -66,7 +96,7 @@ ocr ko "1|자료구조|480|580" "3|영어회화|600|700" "5|물리학|840|940"
 for lang in en de ja; do
   adb shell am start -n $P/.MainActivity --es setlang $lang; sleep 5
   adb shell am start -n $P/.MainActivity; shot "06-$lang-home" 5
-  for s in focus time:0 settings groups weekly; do adb shell am start -n $P/.MainActivity --es open "$s"; shot "06-$lang-${s/:/-}" 3; done
+  for s in focus time:0 table settings groups weekly; do adb shell am start -n $P/.MainActivity --es open "$s"; shot "06-$lang-${s/:/-}" 3; done
   adb shell am start -f 0x10008000 -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ez ask true; shot "06-$lang-pause"
   adb shell input keyevent KEYCODE_BACK
   adb shell am start -f 0x10008000 -n $P/.BlockActivity --es pkg com.android.chrome --es why daily; shot "06-$lang-block"

@@ -68,42 +68,8 @@ private fun NowBanner() {
 @Composable
 private fun CourseTab() {
     val c = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var all by remember { mutableStateOf(Scenes.desired(c)) }
-    val courses = all.filter { it.kind == "course" }
-    var editing by remember { mutableStateOf<Slot?>(null) }
-    var review by remember { mutableStateOf<List<Slot>?>(null) }
-    var shot by remember { mutableStateOf<android.net.Uri?>(null) }
-    var busy by remember { mutableStateOf<String?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    var pickCal by remember { mutableStateOf<List<Pair<Long, String>>?>(null) }
-    var showSecs by remember { mutableStateOf(false) }
-    var showTerm by remember { mutableStateOf(false) }
-    var grid by remember { mutableStateOf(Scenes.gridView(c)) }
-    var ver by remember { mutableStateOf(0) }
-    var group by remember { mutableStateOf<List<Slot>?>(null) }
-    var groupNew by remember { mutableStateOf(false) }
-    var copied by remember { mutableStateOf<Slot?>(null) }
-    var undo by remember { mutableStateOf<Pair<String, List<Slot>>?>(null) }
+    val courses = remember { Scenes.desired(c).filter { it.kind == "course" } }
     var on by remember { mutableStateOf(Scenes.enabled(c)) }
-    fun save(l: List<Slot>) { Scenes.setDesired(c, l); all = Scenes.desired(c) }
-
-    val img = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u ->
-        if (u != null) { busy = tr("正在识别课表…"); err = null; shot = u
-            Ocr.read(c, u) { r, e -> busy = null; if (r != null) review = r else { err = e; review = null } } }
-    }
-    val ics = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            busy = tr("正在读取…"); err = null
-            val r = withContext(Dispatchers.IO) { try { Scenes.fromIcs(c, u) } catch (x: Exception) { null } }
-            busy = null
-            if (r.isNullOrEmpty()) err = tr("这个文件里没读到课程") else { shot = null; review = r }
-        }
-    }
-    val calPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) pickCal = try { Scenes.calendars(c) } catch (x: Exception) { emptyList() } else err = tr("没有日历权限，读不到")
-    }
-
     NowBanner()
     SoftCard(Modifier.fillMaxWidth()) {
         Toggle(tr("按课表自动上课模式"), if (Scenes.enabledToday(c) && !on) tr("已关闭，明天 0:00 起停用") else tr("放假时关掉，次日生效"), on) { on = it; Scenes.setEnabled(c, it) }
@@ -116,103 +82,16 @@ private fun CourseTab() {
         Text(tr("重要：只开放白名单 · 普通：守护的应用不开放 · 水课：打开前先停一下"), fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
         HushToggle(tr("上课时收起通知"), tr("重要课和普通课期间先收起，下课自动放回"), { Scenes.quiet(it) }, { x, v -> Scenes.setQuiet(x, v) })
     }
-
-    Text(tr("导入课表"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ImportBtn(tr("截图识别"), Modifier.weight(1f)) { img.launch("image/*") }
-        ImportBtn(tr("日历"), Modifier.weight(1f)) {
-            if (ContextCompat.checkSelfPermission(c, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED)
-                pickCal = try { Scenes.calendars(c) } catch (x: Exception) { emptyList() }
-            else calPerm.launch(Manifest.permission.READ_CALENDAR)
+    // 课表本身在单独的「课表」页
+    Row(Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(C.Card).clickable { Nav.open.value = "table" }
+        .padding(horizontal = 18.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(tr("打开课表"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+            Text(if (courses.isEmpty()) tr("还没有课：可以从教务网站、截图或文件导入") else tr("{0} 节课 · 每节课的等级在课表里点开修改", courses.size),
+                fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
         }
-        ImportBtn(tr(".ics 文件"), Modifier.weight(1f)) { ics.launch(arrayOf("text/calendar", "*/*")) }
+        Text("›", fontSize = 22.sp, color = C.Faint)
     }
-    busy?.let { Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(16.dp), color = C.Clay, strokeWidth = 2.dp); Text("  $it", fontSize = 13.sp, color = C.Soft) } }
-    err?.let { Text(it, fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.padding(top = 10.dp)) }
-    if (err != null && shot != null) Text(tr("对着截图自己填 ›"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).clickable { err = null; review = emptyList() }.padding(vertical = 6.dp))
-
-    Row(Modifier.padding(top = 20.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(tr("我的课（{0}）", courses.size), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
-        Text(tr("＋ 添加"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { val (f, t) = Scenes.secRange(c, 1, 2); group = listOf(Slot("c" + System.currentTimeMillis(), "", setOf(Tasks.weekday()), f, t)); groupNew = true }.padding(6.dp))
-    }
-    FlowRowLite {
-        for ((label, act) in listOf<Pair<String, () -> Unit>>(
-            (if (grid) tr("列表看") else tr("格子看")) to { grid = !grid; Scenes.setGridView(c, grid) },
-            tr("周次与显示") to { showTerm = true },
-            tr("每节课时间") to { showSecs = !showSecs }))
-            Text(label, fontSize = 12.sp, color = C.Ink, maxLines = 1,
-                modifier = Modifier.padding(top = 4.dp, end = 8.dp, bottom = 8.dp).clip(RoundedCornerShape(10.dp)).background(C.Card).clickable { act() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp))
-    }
-    if (showSecs) SecTimesCard { ver++ }
-    if (courses.isEmpty() && !grid) Text(tr("还没有课。截图识别最快：在课表应用里截一张整周的图就行。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp)
-    if (grid) {
-        if (courses.isEmpty()) Text(tr("还没有课。截图识别最快，也可以直接点格子加。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 8.dp))
-        copied?.let { k ->
-            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(C.ClayPale).padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("已复制「{0}」，点空格子粘贴", k.name), fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.weight(1f))
-                Text(tr("完成"), fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { copied = null }.padding(6.dp))
-            }
-        }
-        undo?.let { (label, prev) ->
-            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(C.Card).padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("已删除「{0}」", label), fontSize = 13.sp, color = C.Soft, modifier = Modifier.weight(1f))
-                Text(tr("撤销"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { save(prev); undo = null; ver++ }.padding(6.dp))
-            }
-        }
-        CourseGrid(courses, ver, onOpen = { s -> group = courses.filter { it.name == s.name }.ifEmpty { listOf(s) }; groupNew = false }, onAdd = { d, sec ->
-            val n = Scenes.secStarts(c).size
-            val k = copied
-            if (k != null) {
-                val (a, b) = Scenes.secSpan(Scenes.secStarts(c), Scenes.secEnds(c), k.from, k.to)
-                val (f, t) = Scenes.secRange(c, sec, minOf(sec + (b - a), n))
-                save(all + k.copy(id = "c" + System.currentTimeMillis(), days = setOf(d), from = f, to = t)); ver++
-            } else {
-                val (f, t) = Scenes.secRange(c, sec, minOf(sec + 1, n))
-                group = listOf(Slot("c" + System.currentTimeMillis(), "", setOf(d), f, t)); groupNew = true
-            }
-        }, onSettings = { showTerm = true }, onCopy = { copied = it; undo = null }, onDelete = { s, d ->
-            val prev = all
-            save(all.mapNotNull { if (it.id != s.id) it else if (it.days.size > 1) it.copy(days = it.days - d) else null })
-            undo = s.name to prev; ver++
-        })
-    } else for (d in 1..7) {
-        val l = courses.filter { d in it.days }.sortedBy { it.from }
-        if (l.isEmpty()) continue
-        Text(dayLabel(d), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-        for (s in l) SlotRow(s) { group = courses.filter { it.name == s.name }; groupNew = false }
-    }
-
-    group?.let { g ->
-        val ids = g.map { it.id }.toSet()
-        CourseEditor(g, groupNew, onSave = { segs ->
-            save(all.filter { it.id !in ids } + segs); group = null; ver++
-        }, onDeleteAll = {
-            val prev = all
-            save(all.filter { it.id !in ids }); undo = (g.firstOrNull()?.name ?: "") to prev; group = null; ver++
-        }, onClose = { group = null })
-    }
-    editing?.let { s -> CourseSheet(s, onSave = { n ->
-        save(all.filter { it.id != s.id } + n); editing = null; ver++
-    }, onDelete = { save(all.filter { it.id != s.id }); editing = null; ver++ }, onClose = { editing = null }) }
-    if (showTerm) TermSheet(onChange = { ver++ }, onClose = { showTerm = false })
-    review?.let { r -> ReviewSheet(r, shot, onAdd = { picked ->
-        val names = picked.map { "${it.name}|${it.days}|${it.from}" }.toSet()
-        save(all.filter { "${it.name}|${it.days}|${it.from}" !in names } + picked); review = null; ver++
-    }, onClose = { review = null }) }
-    pickCal?.let { cals -> CalendarPick(cals, onPick = { id ->
-        pickCal = null
-        scope.launch {
-            busy = tr("正在读取日历…")
-            val r = withContext(Dispatchers.IO) { try { Scenes.fromCalendar(c, id) } catch (x: Exception) { null } }
-            busy = null
-            if (r.isNullOrEmpty()) err = tr("这个日历接下来两周没有日程") else { shot = null; review = r }
-        }
-    }, onClose = { pickCal = null }) }
 }
 
 @Composable
@@ -281,7 +160,7 @@ fun SlotSheet(start: Slot, wifi: Boolean, onSave: (Slot) -> Unit, onDelete: () -
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReviewSheet(found: List<Slot>, shot: android.net.Uri?, onAdd: (List<Slot>) -> Unit, onClose: () -> Unit) {
+internal fun ReviewSheet(found: List<Slot>, shot: android.net.Uri?, onAdd: (List<Slot>) -> Unit, onClose: () -> Unit) {
     val c = LocalContext.current
     val items = remember { mutableStateListOf<Slot>().apply { addAll(found) } }
     val off = remember { mutableStateListOf<String>() }
@@ -348,7 +227,7 @@ private fun ReviewSheet(found: List<Slot>, shot: android.net.Uri?, onAdd: (List<
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CalendarPick(cals: List<Pair<Long, String>>, onPick: (Long) -> Unit, onClose: () -> Unit) {
+internal fun CalendarPick(cals: List<Pair<Long, String>>, onPick: (Long) -> Unit, onClose: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onClose, containerColor = C.Card) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
             Text(tr("选课表所在的日历"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)

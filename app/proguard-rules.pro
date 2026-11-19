@@ -10,3 +10,8 @@
 -dontwarn org.apache.harmony.**
 -dontwarn sun.**
 -dontwarn javax.naming.**
+
+# 课表网页导入：网页里的 JS 调这些方法
+-keepclassmembers class com.liubai.guard.** { @android.webkit.JavascriptInterface <methods>; }
+-dontwarn org.jspecify.**
+-dontwarn com.google.re2j.**
