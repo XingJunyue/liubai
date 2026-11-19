@@ -63,6 +63,22 @@ adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwu
 go table:0; sleep 1
 adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwurl file:///android_asset/jwtest.html --ez jwauto true > /dev/null; shot 07-web-preview 10
 adb logcat -d | grep -i "chromium\|LiubaiJw" | tail -20 > shots/web-log.txt
+# 树维 eams：首页是没有菜单的空架子，「导入课表」自己请求课表接口（本机假服务器 + 手写样例页面，不是真实学校）
+python3 tools/fake_eams.py 8765 2> shots/fake-eams.log &
+FE=$!
+sleep 1
+adb reverse tcp:8765 tcp:8765
+go table:0; sleep 1
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind eams --es jwurl http://127.0.0.1:8765/eams/home.action > /dev/null; shot 07-eams-home 8
+go table:0; sleep 1
+adb logcat -c
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind eams --es jwurl http://127.0.0.1:8765/eams/home.action --ez jwauto true > /dev/null
+for i in $(seq 1 20); do sleep 2; adb logcat -d -s LiubaiTest | grep -q "JW " && break; done
+shot 07-eams-import 3
+adb logcat -d -s LiubaiTest LiubaiWeb > shots/eams.txt
+cat shots/eams.txt | grep "JW " || true
+grep -q "JW parsed 2 kind=eams" shots/eams.txt || { echo "EAMS fetch import failed"; cat shots/fake-eams.log; fail=1; }
+kill $FE 2>/dev/null
 # 教务导入：按学校名搜索（预填搜索词）
 go table:0; sleep 1
 adb shell am start -n $P/.MainActivity --es open table:6 --es jwq 大连 > /dev/null; shot 07-jw-search 5

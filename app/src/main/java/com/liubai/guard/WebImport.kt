@@ -7,7 +7,6 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -29,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -79,12 +79,33 @@ fun JwImportScreen(onClose: () -> Unit, onParsed: (List<JwCourse>) -> Unit) {
     }
 }
 
+/** 搜索词是不是在找东北大学（金智专用入口）。空搜索不算——不默认东大。 */
+internal fun neuHit(t0: String): Boolean {
+    val t = t0.trim().lowercase()
+    if (t.isEmpty() || t.contains("秦皇岛") || t.contains("neuq")) return false
+    return "东北大学".startsWith(t) || (t.length >= 3 && "东北大学".contains(t)) || t.startsWith("东北大学") || listOf("neu", "东大", "金智", "northeastern").any { it.startsWith(t) || t.startsWith(it) }
+}
+
+/** 上次选过的学校（只有用户自己选过才有；新装什么都不预选）。 */
+private data class LastJw(val name: String, val kind: String, val url: String)
+private fun lastJw(c: Context): LastJw? {
+    val p = prefs(c); val k = p.getString("last_kind", null) ?: return null; val u = p.getString("last_url", null) ?: return null
+    return LastJw(p.getString("last_name", "") ?: "", k, u)
+}
+private fun rememberJw(c: Context, name: String, kind: String, url: String) =
+    prefs(c).edit().putString("last_name", name).putString("last_kind", kind).putString("last_url", url).apply()
+
 @Composable
-private fun JwPicker(onClose: () -> Unit, onPick: (String, String) -> Unit) {
+private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
     val c = LocalContext.current
     var q by remember { mutableStateOf(TimetableTest.query ?: "") }
     val schools = remember { schoolsOf(c) }
-    val found = remember(q) { Schools.search(schools, q) }
+    val found = remember(q) { Schools.search(schools, q).filter { !(it.name == "东北大学") } }
+    val last = remember { lastJw(c) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { try { focus.requestFocus() } catch (x: Exception) {} }
+    // 选了就记下来，下次打开放在「上次用的」；手动选类型时名字留空
+    val onPick: (String, String, String) -> Unit = { name, k, u -> rememberJw(c, name, k, u); onPick0(k, u) }
     Column(Modifier.fillMaxSize().background(C.Cream)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("‹", fontSize = 28.sp, color = C.Ink, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(horizontal = 14.dp))
@@ -92,19 +113,33 @@ private fun JwPicker(onClose: () -> Unit, onPick: (String, String) -> Unit) {
         }
         Box(Modifier.padding(horizontal = 18.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(horizontal = 16.dp, vertical = 13.dp)) {
             if (q.isEmpty()) Text(tr("搜索学校或教务类型"), fontSize = 14.sp, color = C.Faint)
-            BasicTextField(q, { q = it }, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth())
+            BasicTextField(q, { q = it }, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth().focusRequester(focus))
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             val t = q.trim().lowercase()
             fun hit(vararg s: String) = t.isEmpty() || s.any { it.lowercase().contains(t) }
-            if (hit("东北大学", "neu", "东大", "金智")) {
+            // 上次用的（只在用户选过之后才有）
+            if (t.isEmpty() && last != null) {
+                val kn = if (last.kind == "neu") tr("金智新教务 · jwxt.neu.edu.cn · 统一身份认证登录") else (Jw.KINDS.firstOrNull { it.id == last.kind }?.name?.let { tr(it) } ?: last.kind)
+                Text(tr("上次用的"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 4.dp))
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card).clickable { onPick(last.name, last.kind, last.url) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(last.name.ifEmpty { android.net.Uri.parse(last.url).host ?: last.url }.let { if (it == "东北大学") tr(it) else it }, fontSize = 15.sp, color = C.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(kn + " · " + (android.net.Uri.parse(last.url).host ?: last.url), fontSize = 11.sp, color = C.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text("›", fontSize = 18.sp, color = C.Faint)
+                }
+            }
+            // 东北大学（金智）只在搜到时出现，不默认放在最上面
+            if (neuHit(t)) {
                 Text(tr("学校"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 4.dp))
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card).padding(16.dp)) {
                     Text(tr("东北大学"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
                     Text(tr("金智新教务 · jwxt.neu.edu.cn · 统一身份认证登录"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 2.dp))
                     Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Pill(tr("校园网直连"), true, Modifier.weight(1f)) { onPick("neu", NEU) }
-                        Pill(tr("校外 WebVPN"), false, Modifier.weight(1f)) { onPick("neu", NEU_VPN) }
+                        Pill(tr("校园网直连"), true, Modifier.weight(1f)) { onPick("东北大学", "neu", NEU) }
+                        Pill(tr("校外 WebVPN"), false, Modifier.weight(1f)) { onPick("东北大学", "neu", NEU_VPN) }
                     }
                 }
             }
@@ -119,7 +154,7 @@ private fun JwPicker(onClose: () -> Unit, onPick: (String, String) -> Unit) {
                         if (i > 0) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(C.Track.copy(alpha = 0.7f)))
                         val kk = Schools.kindOf(sc)
                         val kn = Jw.KINDS.firstOrNull { it.id == kk }?.name ?: kk
-                        Row(Modifier.fillMaxWidth().clickable { onPick(kk, sc.url) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clickable { onPick(sc.name, kk, sc.url) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(sc.name, fontSize = 15.sp, color = C.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -141,7 +176,7 @@ private fun JwPicker(onClose: () -> Unit, onPick: (String, String) -> Unit) {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card)) {
                     kinds.forEachIndexed { i, k ->
                         if (i > 0) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(C.Track.copy(alpha = 0.7f)))
-                        Row(Modifier.fillMaxWidth().clickable { onPick(k.id, prefs(c).getString("url_" + k.id, "") ?: "") }.padding(horizontal = 16.dp, vertical = 13.dp),
+                        Row(Modifier.fillMaxWidth().clickable { onPick("", k.id, prefs(c).getString("url_" + k.id, "") ?: "") }.padding(horizontal = 16.dp, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -181,6 +216,8 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
     var err by remember { mutableStateOf<String?>(null) }
     var campuses by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
     var wv by remember { mutableStateOf<WebView?>(null) }
+    // 电脑版网页：有的统一认证 / 二次认证页面在手机版模板下显示不出来，换成电脑浏览器的标识再加载
+    var desktop by remember { mutableStateOf(prefs(c).getBoolean("desktop", false)) }
     val kname = if (kind == "neu") tr("东北大学") else Jw.KINDS.firstOrNull { it.id == kind }?.name?.let { tr(it) } ?: kind
     val vpn = addr.contains("webvpn.neu.edu.cn")
 
@@ -189,6 +226,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
         if (u.isEmpty()) return
         addr = u; err = null
         if (kind != "neu") prefs(c).edit().putString("url_$kind", u).apply()
+        if (prefs(c).getString("last_kind", null) == kind) prefs(c).edit().putString("last_url", u).apply()
         wv?.loadUrl(u)
     }
     fun grab(arg: String?) {
@@ -198,7 +236,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
     }
     val handle: (String) -> Unit = { s ->
         val j = try { JSONObject(s) } catch (x: Exception) { JSONObject().put("ok", false).put("err", "bad result") }
-        if (!j.optBoolean("ok")) { busy = false; err = friendly(j.optString("err")) }
+        if (!j.optBoolean("ok")) { busy = false; err = friendly(j.optString("err")); if (BuildConfig.DEBUG) android.util.Log.i("LiubaiTest", "JW error ${j.optString("err")}") }
         else if (j.optString("need") == "campus") {
             busy = false
             val a = j.optJSONArray("campuses")
@@ -206,7 +244,9 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
         } else scope.launch {
             val r = withContext(Dispatchers.Default) { try { Jw.parse(if (kind == "neu") "wisedu" else kind, s) } catch (x: Exception) { emptyList() } }
             busy = false
-            if (r.isEmpty()) err = tr("没在这个页面找到课表。请先登录并打开「我的课表」页面，再点导入；也可以换一个教务类型试试。")
+            if (BuildConfig.DEBUG) android.util.Log.i("LiubaiTest", "JW parsed ${r.size} kind=$kind")
+            if (r.isEmpty()) err = if (kind == "eams") tr("没读到课表。请确认已经登录（二次认证也要做完），再点导入；也可以换一个教务类型试试。")
+                else tr("没在这个页面找到课表。请先登录并打开「我的课表」页面，再点导入；也可以换一个教务类型试试。")
             else { CookieManager.getInstance().flush(); onParsed(r) }
         }
     }
@@ -234,6 +274,11 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (vpn) C.Sage else C.Sand).clickable { go(if (vpn) NEU else NEU_VPN) }.padding(horizontal = 8.dp, vertical = 3.dp))
             }
             Spacer(Modifier.weight(1f))
+            Text(if (desktop) tr("电脑版 ✓") else tr("电脑版"), fontSize = 12.sp, color = if (desktop) C.ClayDeep else C.Soft,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable {
+                    desktop = !desktop; prefs(c).edit().putBoolean("desktop", desktop).apply()
+                    wv?.let { w -> w.settings.userAgentString = jwUserAgent(WebSettings.getDefaultUserAgent(w.context), desktop); w.reload() }
+                }.padding(6.dp))
             Text(tr("刷新"), fontSize = 12.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { wv?.reload() }.padding(6.dp))
         }
         Box(Modifier.fillMaxWidth().height(2.dp)) {
@@ -242,18 +287,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AndroidView(factory = { ctx ->
                 WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.databaseEnabled = true
-                    settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
-                    settings.builtInZoomControls = true
-                    settings.displayZoomControls = false
-                    settings.setSupportZoom(true)
-                    settings.javaScriptCanOpenWindowsAutomatically = true
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    CookieManager.getInstance().setAcceptCookie(true)
-                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                    setupJwWebView(this, desktop)
                     addJavascriptInterface(Bridge { onResult.value(it) }, "LiubaiJw")
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) { addr = url }
@@ -261,12 +295,9 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                             addr = url; CookieManager.getInstance().flush()
                             if (TimetableTest.autoImport) { TimetableTest.autoImport = false; grab(null) }
                         }
-                        override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
-                            val s = req.url.scheme ?: return true
-                            return s != "http" && s != "https" && s != "file"
-                        }
+                        override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean = !jwWebScheme(req.url)
                     }
-                    webChromeClient = object : WebChromeClient() { override fun onProgressChanged(view: WebView, p: Int) { progress = p } }
+                    webChromeClient = JwChrome(ctx, this) { progress = it }
                     wv = this
                     if (start.isNotBlank()) loadUrl(start)
                 }
@@ -284,7 +315,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                 }
                 Row(Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(C.Card).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (busy) tr("正在读取课表…") else tr("登录后打开课表页面，再点导入"), fontSize = 12.sp, color = C.Soft, lineHeight = 16.sp, modifier = Modifier.weight(1f),
+                    Text(if (busy) tr("正在读取课表…") else if (kind == "eams") tr("登录后直接点导入，不用打开课表页面") else tr("登录后打开课表页面，再点导入"), fontSize = 12.sp, color = C.Soft, lineHeight = 16.sp, modifier = Modifier.weight(1f),
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Box(Modifier.clip(RoundedCornerShape(16.dp)).background(if (busy) C.Track else C.Clay).clickable(enabled = !busy) { grab(null) }.padding(horizontal = 18.dp, vertical = 12.dp)) {
                         if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = C.Clay, strokeWidth = 2.dp)
@@ -394,6 +425,36 @@ try{
    try{const t=await req(b+p,'');if(t.trim().charAt(0)==='{'){json=t;break;}}catch(e){}
   }
   P({ok:true,kind:K,json:json,html:htmls()}); return;
+ }
+ if(K==='eams'){
+  // 树维 eams：不靠用户点菜单（WebView 里旧版首页常只剩空架子）。直接带着登录态请求课表接口：
+  // courseTableForStd.action 拿 ids / 学期 id → courseTableForStd!courseTable.action（ignoreHead=1）→ 里面的 new TaskActivity(...)。
+  // 参数名参考 shiguang_warehouse 的 UESTC 适配（MIT，见 THIRD_PARTY_NOTICES.md）。
+  const hs=htmls(); const has=t=>!!t&&/new\s+TaskActivity\s*\(/.test(t);
+  if(hs.some(has)){P({ok:true,kind:K,html:hs});return;}
+  let b=base('/eams/'); b=b!=null?b+'/eams':(base('/courseTableForStd')||base('/home')||location.origin);
+  const pickIds=t=>{let m=t.match(/addInput\(\s*form\s*,\s*["']ids["']\s*,\s*["'](\d+)["']/)||t.match(/name=["']ids["'][^>]*value=["'](\d+)["']/)||t.match(/value=["'](\d+)["'][^>]*name=["']ids["']/)||t.match(/[?&]ids=(\d+)/);return m?m[1]:null;};
+  const pickSem=t=>{let m=t.match(/name=["']semester\.id["'][^>]*value=["'](\d+)["']/)||t.match(/value=["'](\d+)["'][^>]*name=["']semester\.id["']/)||t.match(/semesterCalendar\(\s*\{[^}]*value\s*:\s*["']?(\d+)/)||t.match(/["']semester\.id["']\s*,\s*["']?(\d+)/)||t.match(/semester\.id=(\d+)/);return m?m[1]:null;};
+  const cookieSem=()=>{const m=document.cookie.match(/(?:^|;\s*)semester\.id=(\d+)/);return m?m[1]:null;};
+  let ids=null,sem=null,page='';
+  for(const h of hs){ids=ids||pickIds(h);sem=sem||pickSem(h);}
+  if(!ids||!sem){for(const p of ['/courseTableForStd.action','/courseTableForStd!index.action']){try{page=await req(b+p,null);ids=ids||pickIds(page);sem=sem||pickSem(page);if(ids&&sem)break;}catch(e){}}}
+  sem=sem||cookieSem();
+  const sems=[]; if(sem)sems.push(sem);
+  // 电子科大：学期 id 有规律（2025-2026 第一学期 = 483，每学期 +20；同上 MIT 适配）。读不到时按日期推当前和上一个学期。
+  if(location.host.indexOf('uestc.edu.cn')>=0){const n=new Date();const y=n.getFullYear(),m=n.getMonth()+1;const sy=m>=8?y:y-1;const id=483+(sy-2025)*40+((m>=8||m<=1)?0:20);for(const x of [id,id-20,id+20])if(sems.indexOf(String(x))<0)sems.push(String(x));}
+  if(!sems.length)sems.push('');
+  let got=null; const tried=[];
+  outer: for(const s of sems){
+   for(const withIds of (ids?[true,false]:[false])){
+    const o={'ignoreHead':'1','setting.kind':'std','startWeek':'','project.id':'1'}; if(s)o['semester.id']=s; if(withIds)o.ids=ids;
+    const q=enc(o); tried.push(q);
+    try{const t=await req(b+'/courseTableForStd!courseTable.action',q);if(has(t)){got=t;break outer;}}catch(e){}
+    try{const t=await req(b+'/courseTableForStd!courseTable.action?'+q,null);if(has(t)){got=t;break outer;}}catch(e){}
+   }
+  }
+  if(got)hs.push(got); else if(page)hs.push(page);
+  P({ok:true,kind:K,html:hs,eams:{base:b,ids:ids,semester:sem,tried:tried.length}}); return;
  }
  P({ok:true,kind:K,html:htmls()});
 }catch(e){P({ok:false,err:String(e&&e.message||e)});}

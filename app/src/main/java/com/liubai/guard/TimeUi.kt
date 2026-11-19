@@ -231,7 +231,7 @@ internal fun CalendarPick(cals: List<Pair<Long, String>>, onPick: (Long) -> Unit
     ModalBottomSheet(onDismissRequest = onClose, containerColor = C.Card) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
             Text(tr("选课表所在的日历"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-            Text(tr("WakeUp、小爱课程表等可以先同步到系统日历"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+            Text(tr("其他课表 App 可以先同步到系统日历"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
             if (cals.isEmpty()) Text(tr("没有找到日历"), fontSize = 14.sp, color = C.Soft)
             for ((id, n) in cals) Text(n, fontSize = 15.sp, color = C.Ink, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onPick(id) }.padding(vertical = 12.dp))
         }

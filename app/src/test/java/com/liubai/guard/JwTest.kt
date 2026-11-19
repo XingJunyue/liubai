@@ -104,8 +104,8 @@ class JwTest {
         assertEquals(4, Jw.parse("generic", org.json.JSONObject().put("html", org.json.JSONArray().put(res("qz.html"))).toString()).size)
     }
 
-    @Test fun wakeupCsv() {
-        val r = Jw.csv(res("wakeup.csv"))
+    @Test fun csvTable() {
+        val r = Jw.csv(res("courses.csv"))
         assertEquals(3, r.size)
         assertEquals(JwCourse("高等数学", 1, 1, 2, (1..16).toSet(), "张三", "教103"), r[0])
         assertEquals("大学物理, 实验", r[1].name); assertEquals(odd(1, 16), r[1].weeks); assertEquals(5 to 6, r[1].start to r[1].end)

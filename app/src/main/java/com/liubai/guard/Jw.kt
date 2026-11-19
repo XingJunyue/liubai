@@ -296,6 +296,7 @@ object Jw {
             }
             val name = unq(args[3]).replace(Regex("\\([^()]*\\)$"), "").trim()
             val room = unq(args[5])
+            if (room == "停课") continue   // 停课记录不是一节课（电子科大等会把停课单独列成一条）
             val w = bits(unq(args[6]), 0)
             for ((day0, list) in idx.groupBy { it.first }) {
                 val units = list.map { it.second + 1 }.sorted()
@@ -526,7 +527,7 @@ object Jw {
         }
     }
 
-    // ---------------- CSV（WakeUp 模板）----------------
+    // ---------------- CSV 表格（课程名称,星期,开始节数,结束节数,老师,地点,周数）----------------
 
     /** 课程名称,星期,开始节数,结束节数,老师,地点,周数 。第一行是表头就跳过。 */
     fun csv(text: String): List<JwCourse> {

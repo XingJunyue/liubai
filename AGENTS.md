@@ -22,7 +22,8 @@
 
 ## 用户的决定（不要推翻）
 - 课表节次时间由用户自己编辑，不内置东北大学作息预设；导入只在教务数据返回时间时才写时间。
-- 不做 WakeUp 分享口令导入。
+- 不做 WakeUp 分享口令导入；界面上也不要出现「WakeUp」字样（CSV 导入照旧，叫「Excel / CSV 导入」）。`TourAndUpdaterTest.noWakeUpWording` 会查。
+- 教务导入页不默认任何学校（包括东北大学）：打开时搜索框为空并聚焦，东大只在搜到时出现；用户选过一次后才在「上次用的」显示（SharedPreferences `jwimport` 的 `last_*`）。
 - 东大（金智）教务导入已在真实账号验证通过，改其他教务时不要动它的逻辑。
 - 用户自己在侧分支修的东西（如 `usage-fix` 抖音时长统计），合并时不改其逻辑。
 - 新 UI 文案六种语言都要补。
@@ -31,6 +32,9 @@
 - 真实登录验证：仅东大金智。其他全部只有构造的样例页面 / JSON 单测（`JwTest`、`JwAdaptersTest`，样例在 `app/src/test/resources/jw/`），没有真实账号测过。对外说明时如实讲，不夸大。
 - 专用解析：正方（JSON 两个接口 + 页面网格/列表 + 旧版）、强智、新 URP（接口 + 页面）、旧 URP（选课列表）、树维 eams、青果、超星（sdpkkbList 接口）、南软（tb_kcb）。乘方、优慕课仍标「实验性」，只靠通用表格识别；南软也仍标实验性。金智（东大）的解析和 `Jw.parse` 里 wisedu/neu 的分支保持原样，不要动。
 - 解析在 `Jw.kt`（原有）和 `JwAdapters.kt`（jw-adapters 分支移植的），抓取脚本在 `WebImport.kt` 的 `jwScript`。
+- 树维 eams：「导入课表」不要求用户打开课表页（WebView 里旧版首页常是没菜单的空架子），脚本自己 GET `courseTableForStd.action` 取 ids / 学期 id，再 POST `courseTableForStd!courseTable.action`（ignoreHead=1、setting.kind=std、project.id=1、semester.id、ids）；电子科大读不到学期 id 时按日期推（483 起每学期 +20）。`EamsFetchTest` 用 node 模拟页面跑真正的脚本（样例在 `test/resources/jw/eams_uestc/`），冒烟测试用 `tools/fake_eams.py` 在模拟器上端到端跑一遍。都是手写样例，电子科大真实账号没验证过。
+- 内置浏览器设置在 `JwWebView.kt`：UA 去掉「; wv」「Version/4.0」（像普通手机 Chrome），网页上方「电脑版」开关换桌面 UA；window.open/新窗口放回同一页；alert/confirm/prompt 弹真对话框；第三方 Cookie、DOM Storage 开。清单里开了 `usesCleartextTraffic`（不少学校教务是 http）。
+- 已知问题：电子科大统一认证（idas，金智 authserver）二次认证页 `reAuthCheck/reAuthLoginView.do` 在内置浏览器里空白（用户朋友反馈，手机浏览器正常）。已按上面做了通用修复，但没有真实账号，没法确认修好；如果仍空白，先让用户试「电脑版」。
 - 学校搜索：`assets/schools.tsv`（学校\t类型\t网址\t来源\t入口），由 `tools/build_schools.py` 从 shiguang_warehouse（来源 s，社区为该校写过适配）和 baoozak/timetable（来源 b，类型多为猜测，按网址特征修正）生成；`Schools.kt` 搜索，导入页搜索框输入学校名即出结果，点了填网址和类型。手动选类型、输网址照旧；网页页面上方的类型名可点开换类型。列表网址/类型都没验证过，界面上有提示。
 - 第三方参考只用 MIT / Apache-2.0 代码并保留署名（THIRD_PARTY_NOTICES.md，以及 `Jw.kt`/`JwAdapters.kt` 文件头）；不要复制 GPL 项目代码（Dawn-Course、sleepy 等）。
 - 管控按"本周有课"过滤，依赖开学日期和课程周数；开学日期不从教务读取，导入后需用户确认。

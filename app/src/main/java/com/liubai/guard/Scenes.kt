@@ -278,7 +278,7 @@ object Scenes {
         if (key !in out) out[key] = Slot("c${key.hashCode()}", name, setOf(day), from, to)
     }
 
-    /** 读 .ics 文件（WakeUp 课程表、学校教务系统常能导出）。 */
+    /** 读 .ics 文件（课表 App、学校教务系统常能导出）。 */
     fun fromIcs(c: Context, uri: Uri): List<Slot> {
         val raw = c.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: return emptyList()
         return parseIcs(raw)

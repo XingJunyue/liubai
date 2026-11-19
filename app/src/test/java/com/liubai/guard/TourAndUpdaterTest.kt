@@ -47,11 +47,27 @@ class TourAndUpdaterTest {
             "再看一遍专注、管控、课表和教务导入怎么用", "看看这次更新加了什么",
             "输入学校名搜索，已收录 {0} 所学校的教务入口", "搜到的学校",
             "学校列表来自开源项目，网址和类型不一定准；进去后可以改网址、点上方类型名换解析方式。",
-            "有人适配过", "换教务类型", "导入不出来时换一个试试，网页和登录状态不变") + Jw.KINDS.flatMap { listOf(it.name, it.note) }.filter { it.isNotEmpty() }
+            "有人适配过", "换教务类型", "导入不出来时换一个试试，网页和登录状态不变",
+            "课程名、星期、节次、老师、地点、周数", "课表 App 或教务导出的日历文件", "其他课表 App 可以先同步到系统日历", "上次用的", "电脑版", "电脑版 ✓",
+            "没读到课表。请确认已经登录（二次认证也要做完），再点导入；也可以换一个教务类型试试。", "登录后直接点导入，不用打开课表页面") + Jw.KINDS.flatMap { listOf(it.name, it.note) }.filter { it.isNotEmpty() }
         for (lang in listOf("en", "fr", "ja", "ko", "de", "es")) {
             val j = i18n(lang)
             val missing = keys.filter { !j.has(it) || j.optString(it).isBlank() }
             assertTrue("$lang missing: $missing", missing.isEmpty())
         }
+    }
+
+    /** 界面上不再出现 WakeUp 字样（六种语言的键和译文、源码里的 tr 文案都查）。 */
+    @Test fun noWakeUpWording() {
+        for (lang in listOf("en", "fr", "ja", "ko", "de", "es")) {
+            val j = i18n(lang)
+            val bad = j.keys().asSequence().filter { k -> (k + j.optString(k)).contains("wakeup", ignoreCase = true) }.toList()
+            assertTrue("$lang: $bad", bad.isEmpty())
+        }
+        val src = listOf("src/main/java", "app/src/main/java").map { File(it) }.first { it.exists() }
+        val hits = src.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .flatMap { f -> Regex("tr\\(\"([^\"]*)\"").findAll(f.readText()).map { it.groupValues[1] } }
+            .filter { it.contains("wakeup", ignoreCase = true) }.toList()
+        assertTrue("$hits", hits.isEmpty())
     }
 }

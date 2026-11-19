@@ -275,7 +275,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
                 TopIcon(onClick = { importMenu = true }) { ImportGlyph(C.Ink) }
                 DropdownMenu(importMenu, { importMenu = false }, modifier = Modifier.background(C.Card)) {
                     MenuRow(tr("从教务导入"), tr("登录学校教务网站，一键导入")) { importMenu = false; web = true }
-                    MenuRow(tr("Excel / CSV 导入"), tr("WakeUp 模板格式")) { importMenu = false; csv.launch(arrayOf("text/*", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "*/*")) }
+                    MenuRow(tr("Excel / CSV 导入"), tr("课程名、星期、节次、老师、地点、周数")) { importMenu = false; csv.launch(arrayOf("text/*", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "*/*")) }
                     MenuRow(tr("HTML 导入"), tr("保存下来的教务课表网页")) { importMenu = false; html.launch(arrayOf("text/html", "application/xhtml+xml", "*/*")) }
                     MenuRow(tr("截图识别"), tr("课表截图，本机识别")) { importMenu = false; img.launch("image/*") }
                     MenuRow(tr("从日历导入"), tr("系统日历里的课程日程")) {
@@ -284,7 +284,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
                             pickCal = try { Scenes.calendars(c) } catch (x: Exception) { emptyList() }
                         else calPerm.launch(Manifest.permission.READ_CALENDAR)
                     }
-                    MenuRow(tr(".ics 文件"), tr("WakeUp、教务导出的日历文件")) { importMenu = false; ics.launch(arrayOf("text/calendar", "*/*")) }
+                    MenuRow(tr(".ics 文件"), tr("课表 App 或教务导出的日历文件")) { importMenu = false; ics.launch(arrayOf("text/calendar", "*/*")) }
                     HorizontalDivider(color = C.Track)
                     MenuRow(tr("从备份导入"), tr("留白导出的课表备份")) { importMenu = false; restore.launch(arrayOf("application/json", "text/*", "*/*")) }
                 }
