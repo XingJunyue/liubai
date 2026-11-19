@@ -50,6 +50,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import kotlinx.coroutines.delay
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 /** 番茄钟：状态全在 SharedPreferences 里，关掉应用也照样走；守护服务负责到点提醒。 */
 object Focus {
@@ -298,9 +300,50 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             }
         }
 
-        // 主环：细线、圆头，中间大号细体数字
-        Box(Modifier.padding(top = 26.dp).size(272.dp), contentAlignment = Alignment.Center) {
+        // 主环：细线、圆头，中间大号细体数字。空闲时它是转盘：沿着圆环拖动设定时长，一圈 60 分钟，可多转几圈
+        val idle = phase == Focus.IDLE
+        var dialMin by remember(shown, idle) { mutableStateOf(Focus.len(c, shown)) }
+        val haptic = LocalHapticFeedback.current
+        val ringFrac = if (idle) { if (dialMin % 60 == 0) 1f else (dialMin % 60) / 60f } else frac
+        Box(Modifier.padding(top = 26.dp).size(272.dp).pointerInput(idle, shown) {
+            if (!idle) return@pointerInput
+            fun ang(o: Offset): Double {
+                val a = Math.toDegrees(Math.atan2((o.y - size.height / 2f).toDouble(), (o.x - size.width / 2f).toDouble())) + 90.0
+                return if (a < 0) a + 360.0 else a
+            }
+            var last = 0.0
+            var acc = 0.0
+            detectDragGestures(
+                onDragStart = { o -> last = ang(o); acc = dialMin * 6.0 },
+                onDrag = { ch, _ ->
+                    ch.consume()
+                    val a = ang(ch.position)
+                    var d = a - last
+                    if (d > 180) d -= 360.0
+                    if (d < -180) d += 360.0
+                    last = a
+                    acc = (acc + d).coerceIn(6.0, 240 * 6.0)
+                    val m = Math.round(acc / 6.0).toInt().coerceIn(1, 240)
+                    if (m != dialMin) {
+                        dialMin = m; Focus.setLen(c, shown, m)
+                        if (m % 5 == 0) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                }
+            )
+        }, contentAlignment = Alignment.Center) {
+            val frac = ringFrac
             Canvas(Modifier.fillMaxSize()) {
+                if (idle) { // 转盘刻度：每 5 分钟一格
+                    val rr = size.width / 2 - 2.dp.toPx()
+                    for (i in 0 until 12) {
+                        val t = Math.toRadians(i * 30.0 - 90.0)
+                        val cx0 = size.width / 2; val cy0 = size.height / 2
+                        drawLine(C.Faint.copy(alpha = 0.6f),
+                            Offset(cx0 + (rr * Math.cos(t)).toFloat(), cy0 + (rr * Math.sin(t)).toFloat()),
+                            Offset(cx0 + ((rr - 5.dp.toPx()) * Math.cos(t)).toFloat(), cy0 + ((rr - 5.dp.toPx()) * Math.sin(t)).toFloat()),
+                            strokeWidth = 1.5.dp.toPx())
+                    }
+                }
                 val sw = 6.dp.toPx()
                 val inset = sw / 2 + 10.dp.toPx()
                 val sz = Size(size.width - inset * 2, size.height - inset * 2)
@@ -316,11 +359,11 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 if (frac > 0f) drawCircle(accent, sw * 0.55f, Offset(cx, cy))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(mmss(left), fontSize = 60.sp, fontWeight = FontWeight.Light, color = C.Ink,
+                Text(if (idle) mmss(dialMin * 60_000L) else mmss(left), fontSize = 60.sp, fontWeight = FontWeight.Light, color = C.Ink,
                     fontFamily = FontFamily.SansSerif, letterSpacing = 1.sp)
                 Text(
                     when {
-                        phase == Focus.IDLE -> tr("准备好了就开始")
+                        phase == Focus.IDLE -> tr("沿圆环拖动调时长")
                         !running -> tr("已暂停")
                         isBreak -> tr("放松一下")
                         else -> tr("正在专注")
@@ -504,8 +547,22 @@ private fun FocusSettings(idle: Boolean, strict: Boolean, onWhitelist: () -> Uni
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 15.sp, color = C.Ink, modifier = Modifier.weight(1f))
             Text("−", fontSize = 20.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { if (value > 1) onChange(value - 1) }.padding(horizontal = 12.dp, vertical = 2.dp))
-            Text(tr("{0} 分钟", value), fontSize = 15.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 64.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            // 点数字直接输入任意分钟数（至少 1）
+            var text by remember(value) { mutableStateOf(value.toString()) }
+            androidx.compose.foundation.text.BasicTextField(
+                value = text,
+                onValueChange = { t ->
+                    val d = t.filter { it.isDigit() }.take(4)
+                    text = d
+                    d.toIntOrNull()?.let { if (it >= 1) onChange(it) }
+                },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Clay,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                modifier = Modifier.width(56.dp).clip(RoundedCornerShape(10.dp)).background(C.ClayPale).padding(vertical = 4.dp)
+            )
+            Text(tr("分钟"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(start = 4.dp))
             Text("+", fontSize = 20.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { onChange(value + 1) }.padding(horizontal = 12.dp, vertical = 2.dp))
         }
     }
