@@ -245,7 +245,8 @@ object Ocr {
         val parts = ArrayList<String>()
         for (raw0 in ls) {
             val raw = raw0.trim().let { r -> val i = r.indexOfAny(charArrayOf('@', '＠')); if (i > 0) r.substring(0, i) else r }
-            var t = raw.trim().trimStart('@', '＠')
+            // 表格竖线常被认成「|」「丨」「l」，粘在课名两头
+            var t = raw.trim().trimStart('@', '＠').trim('|', '｜', '丨', '¦', '[', ']', '【', '】', ' ')
             // 课名和教室挤在同一行（如「線形代数 講義室3」）：从教室那里截断
             NOISE.find(t)?.let { m -> if (m.range.first >= 2 && !raw0.trim().startsWith("@")) t = t.substring(0, m.range.first).trim() }
             if (t.isEmpty()) continue
