@@ -215,14 +215,14 @@ object Ocr {
                 val top = cell.minOf { it.r.top }.toFloat(); val bot = cell.maxOf { it.r.bottom }.toFloat()
                 val s1 = ((top - a) / b + 0.5f).roundToInt().coerceIn(1, maxSec)
                 val s2 = ((bot - a) / b - 0.5f).roundToInt().coerceIn(s1, maxSec)
-                Triple(name, s1, s2)
+                Cell(name, s1, s2, extras(rows))
             }
-            parsed.forEachIndexed { i, (name, s1, s2raw) ->
+            parsed.forEachIndexed { i, (name, s1, s2raw, ex) ->
                 // 文字通常只占格子上半截：没有别的课挡着时，按最常见的两节连上
-                val next = parsed.getOrNull(i + 1)?.second ?: (maxSec + 1)
+                val next = parsed.getOrNull(i + 1)?.s1 ?: (maxSec + 1)
                 val s2 = maxOf(s2raw, minOf(s1 + 1, next - 1, maxSec)).coerceAtLeast(s1)
                 val (f, t) = sec(s1, s2)
-                out += Slot("o$d-$s1-${name.hashCode()}", name, setOf(d), f, t)
+                out += Slot("o$d-$s1-${name.hashCode()}", name, setOf(d), f, t, room = ex.first, teacher = ex.second, weeks = ex.third)
             }
         }
         // 同一天同名、时间挨着的并成一节
@@ -231,6 +231,29 @@ object Ocr {
             for (x in s) { val y = m.lastOrNull(); if (y != null && x.from <= y.to + 15) m[m.lastIndex] = y.copy(to = maxOf(y.to, x.to)) else m += x }
             m
         }.sortedWith(compareBy({ it.days.first() }, { it.from }))
+    }
+
+    data class Cell(val name: String, val s1: Int, val s2: Int, val ex: Triple<String, String, Set<Int>>)
+
+    private val WEEKS = Regex("(\\d+\\s*[-~～–]\\s*\\d+|\\d+(?:\\s*[,，、]\\s*\\d+)*)\\s*(周|週|주|(?i)weeks?|wk|semaines?|wochen?|semanas?)|[单双單雙]周")
+
+    /** 格子里除课名外的东西：@教室、老师、周次。 */
+    fun extras(rows: List<String>): Triple<String, String, Set<Int>> {
+        var room = ""; var teacher = ""; var weeks = emptySet<Int>()
+        val all = rows.joinToString(" ")
+        WEEKS.find(all)?.let { m -> weeks = Slot.parseWeeks(m.value + (if (Regex("[单單]周|\\(单\\)|（单）").containsMatchIn(all)) " 单" else if (Regex("[双雙]周|\\(双\\)|（双）").containsMatchIn(all)) " 双" else "")) }
+        val ri = rows.indexOfFirst { val t = it.trim(); t.startsWith("@") || t.startsWith("＠") || (t.indexOf('@') > 0) }
+        if (ri >= 0) {
+            val t = rows[ri].trim(); val k = t.indexOfAny(charArrayOf('@', '＠'))
+            room = t.substring(k + 1).trim().trim('|', '｜', '丨').trim()
+            // 教室常被折成两行（「@机」「401-语音室」）：下一行像教室号就接上
+            val nx = rows.getOrNull(ri + 1)?.trim()
+            var ti = ri + 1
+            if (nx != null && room.length <= 3 && Regex("^[A-Za-z]?\\d").containsMatchIn(nx)) { room += nx; ti++ }
+            val tc = rows.getOrNull(ti)?.trim()?.trim('|', '｜', '丨')?.trim()
+            if (tc != null && tc.length in 2..20 && !tc.any { it.isDigit() } && !WEEKS.containsMatchIn(tc)) teacher = tc
+        }
+        return Triple(room.take(20), teacher.take(20), weeks)
     }
 
     /** 教室、老师、周次这些不是课名。 */

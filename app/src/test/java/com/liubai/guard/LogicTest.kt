@@ -158,4 +158,36 @@ END:VCALENDAR"""
         val r2 = Rules.stricter(Extra(), Extra(opens = 3))
         assertEquals(3, r2.opens)
     }
+
+    @Test fun ocrRoomTeacherWeeks() {
+        val g = grid()
+        g += l("高等数学", 200, 104); g += l("@A101", 200, 132); g += l("张老师", 200, 160)
+        g += l("大学英语@B203", 440, 224)
+        g += l("形势与政策", 680, 584); g += l("1-16周", 680, 612); g += l("C楼", 680, 640)
+        val r = Ocr.parse(g, 1000, ::sec).associateBy { it.name }
+        assertEquals("A101", r["高等数学"]!!.room); assertEquals("张老师", r["高等数学"]!!.teacher)
+        assertEquals("B203", r["大学英语"]!!.room)
+        assertEquals((1..16).toSet(), r["形势与政策"]!!.weeks)
+        val ex = Ocr.extras(listOf("大学英语(一)", "@机", "401-语音室", "宋岩"))
+        assertEquals("机401-语音室", ex.first); assertEquals("宋岩", ex.second)
+    }
+
+    @Test fun weeks() {
+        assertEquals((1..16).toSet(), Slot.parseWeeks("1-16周"))
+        assertEquals(setOf(1, 3, 5, 7), Slot.parseWeeks("1-8周 单"))
+        assertEquals(setOf(2, 4, 6, 8), Slot.parseWeeks("1-8双周"))
+        assertEquals(setOf(3, 5, 9, 10, 11), Slot.parseWeeks("3,5,9-11周"))
+        assertEquals("1-16周", Slot.weeksText((1..16).toSet()))
+        assertEquals("1-15周(单)", Slot.weeksText((1..15 step 2).toSet()))
+        assertEquals("3,5,9-11周", Slot.weeksText(setOf(3, 5, 9, 10, 11)))
+        assertEquals("每周", Slot.weeksText(emptySet()))
+        // 1970-01-05 是周一（epoch 4）
+        assertEquals(4L, Scenes.mondayOf(4)); assertEquals(4L, Scenes.mondayOf(10)); assertEquals(11L, Scenes.mondayOf(11))
+        assertEquals(1, Scenes.weekOf(4, 10)); assertEquals(2, Scenes.weekOf(4, 11)); assertEquals(12, Scenes.weekOf(4, 4 + 77 + 3))
+        val odd = Slot("o", "物理", setOf(1), 480, 580, 1, weeks = setOf(1, 3))
+        assertTrue(odd.inWeek(3)); assertFalse(odd.inWeek(2)); assertTrue(odd.inWeek(null))
+        val j = Slot.of(odd.copy(room = "A1", teacher = "王", color = 3).json())
+        assertEquals(setOf(1, 3), j.weeks); assertEquals("A1", j.room); assertEquals("王", j.teacher); assertEquals(3, j.color)
+        assertEquals(2 to 3, Scenes.secSpan(listOf(480, 535, 600), listOf(525, 580, 645), 535, 645))
+    }
 }

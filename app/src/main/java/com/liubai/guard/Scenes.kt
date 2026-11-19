@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.TimeZone
+import kotlin.math.abs
 
 /**
  * 时段规则：课表里的每节课、自己定的场景（比如图书馆 Wi-Fi、工作日白天）。
@@ -14,19 +15,58 @@ import java.util.TimeZone
  */
 data class Slot(
     val id: String, val name: String, val days: Set<Int>, val from: Int, val to: Int,
-    val level: Int = 1, val ssid: String = "", val kind: String = "course"
+    val level: Int = 1, val ssid: String = "", val kind: String = "course",
+    /** 教室、老师；weeks 为空 = 每周都上；color -1 = 按课名自动配色。 */
+    val room: String = "", val teacher: String = "", val weeks: Set<Int> = emptySet(), val color: Int = -1
 ) {
     fun json(): JSONObject = JSONObject().put("id", id).put("n", name).put("d", JSONArray(days.toList())).put("f", from).put("t", to)
-        .put("l", level).put("s", ssid).put("k", kind)
+        .put("l", level).put("s", ssid).put("k", kind).put("r", room).put("te", teacher).put("w", JSONArray(weeks.sorted())).put("co", color)
+
+    /** 这周上不上（week 为 null 表示没设开学日期，按每周都上算）。 */
+    fun inWeek(week: Int?) = week == null || weeks.isEmpty() || week in weeks
 
     companion object {
         fun of(j: JSONObject): Slot {
             val d = j.optJSONArray("d") ?: JSONArray()
+            val w = j.optJSONArray("w") ?: JSONArray()
             return Slot(j.optString("id"), j.optString("n"), (0 until d.length()).map { d.getInt(it) }.toSet(),
-                j.optInt("f"), j.optInt("t"), j.optInt("l", 1), j.optString("s", ""), j.optString("k", "course"))
+                j.optInt("f"), j.optInt("t"), j.optInt("l", 1), j.optString("s", ""), j.optString("k", "course"),
+                j.optString("r", ""), j.optString("te", ""), (0 until w.length()).map { w.getInt(it) }.toSet(), j.optInt("co", -1))
         }
         val LEVELS = listOf(tr("水课"), tr("普通"), tr("重要"))
         val LEVEL_NOTE = listOf(tr("打开守护中的应用前先停一下"), tr("守护中的应用不开放"), tr("只开放白名单里的应用"))
+
+        /** 「1-16周」「3,5,7」「1-8,10-16 单」这类写法 → 周次集合；空串 = 每周。 */
+        fun parseWeeks(t0: String, max: Int = 30): Set<Int> {
+            val t = t0.replace('，', ',').replace('、', ',').replace('～', '-').replace('~', '-').replace('—', '-').replace('–', '-')
+            val odd = Regex("单|單|odd|impair|ungerade|impar|奇").containsMatchIn(t)
+            val even = Regex("双|雙|even|pair(?!e)|gerade(?!r)|par\\b|偶").containsMatchIn(t) && !Regex("ungerade|impair|impar").containsMatchIn(t)
+            val out = sortedSetOf<Int>()
+            for (m in Regex("(\\d+)\\s*(?:-\\s*(\\d+))?").findAll(t)) {
+                val a = m.groupValues[1].toInt(); val b = m.groupValues[2].toIntOrNull() ?: a
+                for (w in minOf(a, b)..maxOf(a, b)) if (w in 1..max) out += w
+            }
+            val r = out.filter { (!odd || it % 2 == 1) && (!even || it % 2 == 0) }.toSet()
+            if (r.isEmpty() && (odd || even)) return (1..max).filter { if (odd) it % 2 == 1 else it % 2 == 0 }.toSet()
+            return r
+        }
+        /** 周次集合 → 简短文字：每周 / 1-16周 / 1-15周(单) / 3,5,9周 */
+        fun weeksText(w: Set<Int>): String {
+            if (w.isEmpty()) return tr("每周")
+            val l = w.sorted()
+            val step = if (l.size >= 2 && l.zipWithNext().all { (a, b) -> b - a == 2 }) 2 else if (l.zipWithNext().all { (a, b) -> b - a == 1 }) 1 else 0
+            val body = when {
+                l.size == 1 -> "${l[0]}"
+                step == 1 -> "${l.first()}-${l.last()}"
+                step == 2 -> "${l.first()}-${l.last()}"
+                else -> {
+                    val parts = ArrayList<String>(); var i = 0
+                    while (i < l.size) { var j = i; while (j + 1 < l.size && l[j + 1] == l[j] + 1) j++; parts += if (j > i) "${l[i]}-${l[j]}" else "${l[i]}"; i = j + 1 }
+                    parts.joinToString(",")
+                }
+            }
+            return tr("{0}周", body) + if (step == 2 && l.size >= 2) (if (l.first() % 2 == 1) tr("(单)") else tr("(双)")) else ""
+        }
     }
 }
 
@@ -74,16 +114,54 @@ object Scenes {
     fun quiet(c: Context) = p(c).getBoolean("quiet", false)
     fun setQuiet(c: Context, v: Boolean) = p(c).edit().putBoolean("quiet", v).apply()
 
+    // ---------- 周次 ----------
+    /** 第 1 周周一（epoch 天）；-1 = 没设，所有课按每周都上。 */
+    fun termStart(c: Context) = p(c).getLong("term", -1L)
+    fun setTermStart(c: Context, day: Long) = p(c).edit().putLong("term", day).apply()
+    fun totalWeeks(c: Context) = p(c).getInt("weeks", 20)
+    fun setTotalWeeks(c: Context, n: Int) = p(c).edit().putInt("weeks", n.coerceIn(1, 30)).apply()
+    fun showOff(c: Context) = p(c).getBoolean("showOff", true)
+    fun setShowOff(c: Context, v: Boolean) = p(c).edit().putBoolean("showOff", v).apply()
+    fun showWeekend(c: Context) = p(c).getBoolean("weekend", true)
+    fun setShowWeekend(c: Context, v: Boolean) = p(c).edit().putBoolean("weekend", v).apply()
+    fun gridView(c: Context) = p(c).getBoolean("grid", true)
+    fun setGridView(c: Context, v: Boolean) = p(c).edit().putBoolean("grid", v).apply()
+
+    /** 今天所在周一的 epoch 天。 */
+    fun mondayOf(epochDay: Long): Long { val dow = Math.floorMod(epochDay + 3, 7L); return epochDay - dow }  // 1970-01-01 是周四
+    fun todayEpoch(): Long { val k = Calendar.getInstance(); return Math.floorDiv(k.timeInMillis + k.get(Calendar.ZONE_OFFSET) + k.get(Calendar.DST_OFFSET), 86_400_000L) }
+    /** 现在是第几周；没设开学日期返回 null。 */
+    fun weekNow(c: Context): Int? { val t = termStart(c); return if (t < 0) null else weekOf(t, todayEpoch()) }
+    fun weekOf(term: Long, day: Long) = Math.floorDiv(mondayOf(day) - term, 7L).toInt() + 1
+    /** 「现在是第 n 周」：倒推出第 1 周的周一。 */
+    fun setWeekNow(c: Context, n: Int) = setTermStart(c, mondayOf(todayEpoch()) - (n - 1) * 7L)
+
     // ---------- 每节课的时间 ----------
     private val DEFAULT_SEC = listOf(480, 535, 600, 655, 840, 895, 960, 1015, 1140, 1195, 1250, 1305)
     fun secStarts(c: Context): List<Int> = (p(c).getString("secs", null)?.split(',')?.mapNotNull { it.toIntOrNull() } ?: DEFAULT_SEC).ifEmpty { DEFAULT_SEC }
     fun setSecStarts(c: Context, l: List<Int>) = p(c).edit().putString("secs", l.joinToString(",")).apply()
     fun secLen(c: Context) = p(c).getInt("secLen", 45)
     fun setSecLen(c: Context, m: Int) = p(c).edit().putInt("secLen", m).apply()
+    /** 每节下课时间：单独改过的用改过的，没改过的 = 上课时间 + 每节时长。 */
+    fun secEnds(c: Context): List<Int> {
+        val st = secStarts(c); val len = secLen(c)
+        val saved = p(c).getString("secE", null)?.split(',')?.map { it.toIntOrNull() } ?: emptyList()
+        return st.indices.map { i -> saved.getOrNull(i)?.takeIf { it > st[i] } ?: (st[i] + len) }
+    }
+    fun setSecEnds(c: Context, l: List<Int>) = p(c).edit().putString("secE", l.joinToString(",")).apply()
+    /** 统一时长：清掉单独改过的下课时间。 */
+    fun resetSecEnds(c: Context) = p(c).edit().remove("secE").apply()
     fun secRange(c: Context, a: Int, b: Int): Pair<Int, Int> {
-        val s = secStarts(c)
+        val s = secStarts(c); val e = secEnds(c)
         val i = (a - 1).coerceIn(0, s.lastIndex); val j = (b - 1).coerceIn(i, s.lastIndex)
-        return s[i] to s[j] + secLen(c)
+        return s[i] to e[j]
+    }
+    /** 一段时间落在第几节到第几节（就近算）。 */
+    fun secSpan(starts: List<Int>, ends: List<Int>, from: Int, to: Int): Pair<Int, Int> {
+        if (starts.isEmpty()) return 1 to 1
+        val a = starts.indices.minByOrNull { abs(starts[it] - from) } ?: 0
+        val b = (ends.indices.minByOrNull { abs(ends[it] - to) } ?: a).coerceAtLeast(a)
+        return (a + 1) to (b + 1)
     }
 
     // ---------- 现在是什么时段 ----------
@@ -103,7 +181,8 @@ object Scenes {
 
     fun now(c: Context): Slot? {
         val l = active(c); if (l.isEmpty()) return null
-        return pick(l, Tasks.weekday(), Rules.nowMin()) { wifi(c) }
+        val w = weekNow(c)
+        return pick(l.filter { it.kind != "course" || it.inWeek(w) }, Tasks.weekday(), Rules.nowMin()) { wifi(c) }
     }
 
     /** 纯计算：星期 d、第 m 分钟时生效的最严那条。 */

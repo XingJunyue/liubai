@@ -78,6 +78,9 @@ private fun CourseTab() {
     var err by remember { mutableStateOf<String?>(null) }
     var pickCal by remember { mutableStateOf<List<Pair<Long, String>>?>(null) }
     var showSecs by remember { mutableStateOf(false) }
+    var showTerm by remember { mutableStateOf(false) }
+    var grid by remember { mutableStateOf(Scenes.gridView(c)) }
+    var ver by remember { mutableStateOf(0) }
     var on by remember { mutableStateOf(Scenes.enabled(c)) }
     fun save(l: List<Slot>) { Scenes.setDesired(c, l); all = Scenes.desired(c) }
 
@@ -125,26 +128,45 @@ private fun CourseTab() {
     if (err != null && shot != null) Text(tr("对着截图自己填 ›"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).clickable { err = null; review = emptyList() }.padding(vertical = 6.dp))
 
-    Row(Modifier.padding(top = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.padding(top = 20.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(tr("我的课（{0}）", courses.size), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
-        Text(tr("每节课时间"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { showSecs = !showSecs }.padding(6.dp))
         Text(tr("＋ 添加"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { editing = Slot("c" + System.currentTimeMillis(), "", setOf(Tasks.weekday()), 480, 570) }.padding(6.dp))
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { val (f, t) = Scenes.secRange(c, 1, 2); editing = Slot("c" + System.currentTimeMillis(), "", setOf(Tasks.weekday()), f, t) }.padding(6.dp))
     }
-    if (showSecs) SecTimes()
-    if (courses.isEmpty()) Text(tr("还没有课。截图识别最快：在课表应用里截一张整周的图就行。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp)
-    for (d in 1..7) {
+    FlowRowLite {
+        for ((label, act) in listOf<Pair<String, () -> Unit>>(
+            (if (grid) tr("列表看") else tr("格子看")) to { grid = !grid; Scenes.setGridView(c, grid) },
+            tr("周次与显示") to { showTerm = true },
+            tr("每节课时间") to { showSecs = !showSecs }))
+            Text(label, fontSize = 12.sp, color = C.Ink, maxLines = 1,
+                modifier = Modifier.padding(top = 4.dp, end = 8.dp, bottom = 8.dp).clip(RoundedCornerShape(10.dp)).background(C.Card).clickable { act() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp))
+    }
+    if (showSecs) SecTimesCard { ver++ }
+    if (courses.isEmpty() && !grid) Text(tr("还没有课。截图识别最快：在课表应用里截一张整周的图就行。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp)
+    if (grid) {
+        if (courses.isEmpty()) Text(tr("还没有课。截图识别最快，也可以直接点格子加。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 8.dp))
+        CourseGrid(courses, ver, onOpen = { editing = it }, onAdd = { d, sec ->
+            val n = Scenes.secStarts(c).size
+            val (f, t) = Scenes.secRange(c, sec, minOf(sec + 1, n))
+            editing = Slot("c" + System.currentTimeMillis(), "", setOf(d), f, t)
+        }, onSettings = { showTerm = true })
+    } else for (d in 1..7) {
         val l = courses.filter { d in it.days }.sortedBy { it.from }
         if (l.isEmpty()) continue
         Text(dayLabel(d), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
         for (s in l) SlotRow(s) { editing = s }
     }
 
-    editing?.let { s -> SlotSheet(s, wifi = false, onSave = { n -> save(all.filter { it.id != s.id } + n); editing = null },
-        onDelete = { save(all.filter { it.id != s.id }); editing = null }, onClose = { editing = null }) }
+    editing?.let { s -> CourseSheet(s, onSave = { n ->
+        // 同名课一起换颜色
+        val rest = all.filter { it.id != s.id }.map { if (it.kind == "course" && it.name == n.name && it.color != n.color) it.copy(color = n.color) else it }
+        save(rest + n); editing = null; ver++
+    }, onDelete = { save(all.filter { it.id != s.id }); editing = null; ver++ }, onClose = { editing = null }) }
+    if (showTerm) TermSheet(onChange = { ver++ }, onClose = { showTerm = false })
     review?.let { r -> ReviewSheet(r, shot, onAdd = { picked ->
         val names = picked.map { "${it.name}|${it.days}|${it.from}" }.toSet()
-        save(all.filter { "${it.name}|${it.days}|${it.from}" !in names } + picked); review = null
+        save(all.filter { "${it.name}|${it.days}|${it.from}" !in names } + picked); review = null; ver++
     }, onClose = { review = null }) }
     pickCal?.let { cals -> CalendarPick(cals, onPick = { id ->
         pickCal = null
@@ -169,33 +191,11 @@ private fun SlotRow(s: Slot, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(14.dp)).background(C.Card).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(levelColor(s.level)))
-        Text(s.name, fontSize = 14.sp, color = C.Ink, modifier = Modifier.padding(start = 10.dp).weight(1f), maxLines = 1)
+        Text(if (s.room.isBlank()) s.name else "${s.name} @${s.room}", fontSize = 14.sp, color = C.Ink, modifier = Modifier.padding(start = 10.dp).weight(1f), maxLines = 1)
         if (s.kind == "scene") Text(daysText(s.days) + " ", fontSize = 12.sp, color = C.Faint)
+        if (s.weeks.isNotEmpty()) Text(Slot.weeksText(s.weeks) + " ", fontSize = 11.sp, color = C.Faint, maxLines = 1)
         Text("${Rules.clock(s.from)}–${Rules.clock(s.to)}", fontSize = 12.sp, color = C.Soft)
         Text("  ${Slot.LEVELS[s.level]}", fontSize = 12.sp, color = levelColor(s.level), fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun SecTimes() {
-    val c = LocalContext.current
-    var secs by remember { mutableStateOf(Scenes.secStarts(c)) }
-    var len by remember { mutableStateOf(Scenes.secLen(c)) }
-    SoftCard(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-        Text(tr("截图识别按「第几节」换算成时间，按你学校的作息改一下"), fontSize = 12.sp, color = C.Faint)
-        StepSlider(tr("每节课"), len, 30..120, 5, tr("分钟")) { len = it; Scenes.setSecLen(c, it) }
-        secs.forEachIndexed { i, m ->
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("第 {0} 节", i + 1), fontSize = 13.sp, color = C.Soft, modifier = Modifier.weight(1f))
-                Text("−", fontSize = 18.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { secs = secs.toMutableList().also { it[i] = m - 5 }; Scenes.setSecStarts(c, secs) }.padding(horizontal = 12.dp))
-                Text(Rules.clock(m), fontSize = 15.sp, color = C.Ink, fontWeight = FontWeight.SemiBold)
-                Text("+", fontSize = 18.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { secs = secs.toMutableList().also { it[i] = m + 5 }; Scenes.setSecStarts(c, secs) }.padding(horizontal = 12.dp))
-            }
-        }
-        Row(Modifier.padding(top = 8.dp)) {
-            Text(tr("＋ 加一节"), fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.clickable { secs = secs + ((secs.lastOrNull() ?: 480) + len + 10); Scenes.setSecStarts(c, secs) }.padding(6.dp))
-            if (secs.size > 1) Text(tr("减一节"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.clickable { secs = secs.dropLast(1); Scenes.setSecStarts(c, secs) }.padding(6.dp))
-        }
     }
 }
 
@@ -301,7 +301,7 @@ private fun ReviewSheet(found: List<Slot>, shot: android.net.Uri?, onAdd: (List<
             PrimaryButton(tr("导入 {0} 节", items.count { it.id !in off }), enabled = items.any { it.id !in off }) { onAdd(items.filter { it.id !in off }) }
         }
     }
-    editing?.let { s -> SlotSheet(s, wifi = false, onSave = { n ->
+    editing?.let { s -> CourseSheet(s, onSave = { n ->
         val i = items.indexOfFirst { it.id == s.id }
         // 同名课一起改等级
         for (j in items.indices) if (items[j].name == s.name && items[j].id != s.id && s.name.isNotEmpty()) items[j] = items[j].copy(level = n.level)
@@ -347,10 +347,8 @@ private fun SceneTab() {
 private fun SecPicker(s: Slot, onSet: (Int, Int) -> Unit) {
     val c = LocalContext.current
     val starts = remember { Scenes.secStarts(c) }
-    val len = remember { Scenes.secLen(c) }
-    fun near(m: Int) = starts.indices.minByOrNull { abs(starts[it] - m) } ?: 0
-    val a = near(s.from) + 1
-    val b = (starts.indices.minByOrNull { abs(starts[it] + len - s.to) } ?: 0).plus(1).coerceAtLeast(a)
+    val ends = remember { Scenes.secEnds(c) }
+    val (a, b) = Scenes.secSpan(starts, ends, s.from, s.to)
     fun set(x: Int, y: Int) { val (f, t) = Scenes.secRange(c, x, y); onSet(f, t) }
     Row(Modifier.padding(top = 12.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(tr("节次"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.weight(1f))
@@ -361,7 +359,7 @@ private fun SecPicker(s: Slot, onSet: (Int, Int) -> Unit) {
 }
 
 @Composable
-private fun Stepper(v: Int, min: Int, max: Int, onChange: (Int) -> Unit) {
+internal fun Stepper(v: Int, min: Int, max: Int, onChange: (Int) -> Unit) {
     Row(Modifier.clip(RoundedCornerShape(12.dp)).background(C.Sand), verticalAlignment = Alignment.CenterVertically) {
         Text("−", fontSize = 18.sp, color = if (v > min) C.Clay else C.Faint, modifier = Modifier.clickable(enabled = v > min) { onChange(v - 1) }.padding(horizontal = 12.dp, vertical = 4.dp))
         Text("$v", fontSize = 15.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 20.dp))

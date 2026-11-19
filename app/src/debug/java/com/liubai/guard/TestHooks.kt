@@ -34,8 +34,12 @@ object TestHooks {
             Store.setExtra(c, "com.android.chrome", Extra(delay = 5, grow = true, opens = 5, ask = true, again = 10))
         }
         if (Scenes.desired(c).isEmpty()) Scenes.setDesired(c, listOf(
-            Slot("t1", "高等数学", setOf(1, 3), 480, 580, 2), Slot("t2", "大学英语", setOf(2), 600, 700, 1),
+            Slot("t1", "高等数学", setOf(1, 3), 480, 580, 2, room = "教103", teacher = "刘老师"),
+            Slot("t2", "大学英语", setOf(2), 600, 700, 1, room = "机401-语音室", teacher = "宋老师"),
+            Slot("t4", "无机化学", setOf(4), 840, 940, 1, room = "逸310", teacher = "徐老师", weeks = (1..16).toSet()),
+            Slot("t5", "大学物理实验", setOf(4), 600, 700, 1, room = "实验楼", weeks = setOf(1, 3, 5, 7, 9, 11, 13, 15)),
             Slot("t3", "形势与政策", setOf(5), 1140, 1240, 0), Slot("s1", "图书馆", setOf(1, 2, 3, 4, 5), 540, 1080, 1, "LIB", "scene")))
+        if (Scenes.termStart(c) < 0) Scenes.setWeekNow(c, 12)
         if (Tasks.todos(c).isEmpty()) Tasks.setTodos(c, listOf(Todo("a", "背 50 个单词", "学习"), Todo("b", "写实验报告", "学习", true)))
         if (Tasks.plans(c).isEmpty()) Tasks.setPlans(c, listOf(Plan("p", setOf(1, 2, 3, 4, 5), 20 * 60)))
         Log.i("LiubaiTest", "seeded")
