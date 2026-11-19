@@ -17,10 +17,12 @@ data class Slot(
     val id: String, val name: String, val days: Set<Int>, val from: Int, val to: Int,
     val level: Int = 1, val ssid: String = "", val kind: String = "course",
     /** 教室、老师；weeks 为空 = 每周都上；color -1 = 按课名自动配色。 */
-    val room: String = "", val teacher: String = "", val weeks: Set<Int> = emptySet(), val color: Int = -1
+    val room: String = "", val teacher: String = "", val weeks: Set<Int> = emptySet(), val color: Int = -1,
+    val note: String = "", val credit: String = ""
 ) {
     fun json(): JSONObject = JSONObject().put("id", id).put("n", name).put("d", JSONArray(days.toList())).put("f", from).put("t", to)
         .put("l", level).put("s", ssid).put("k", kind).put("r", room).put("te", teacher).put("w", JSONArray(weeks.sorted())).put("co", color)
+        .put("no", note).put("cr", credit)
 
     /** 这周上不上（week 为 null 表示没设开学日期，按每周都上算）。 */
     fun inWeek(week: Int?) = week == null || weeks.isEmpty() || week in weeks
@@ -31,7 +33,8 @@ data class Slot(
             val w = j.optJSONArray("w") ?: JSONArray()
             return Slot(j.optString("id"), j.optString("n"), (0 until d.length()).map { d.getInt(it) }.toSet(),
                 j.optInt("f"), j.optInt("t"), j.optInt("l", 1), j.optString("s", ""), j.optString("k", "course"),
-                j.optString("r", ""), j.optString("te", ""), (0 until w.length()).map { w.getInt(it) }.toSet(), j.optInt("co", -1))
+                j.optString("r", ""), j.optString("te", ""), (0 until w.length()).map { w.getInt(it) }.toSet(), j.optInt("co", -1),
+                j.optString("no", ""), j.optString("cr", ""))
         }
         val LEVELS = listOf(tr("水课"), tr("普通"), tr("重要"))
         val LEVEL_NOTE = listOf(tr("打开守护中的应用前先停一下"), tr("守护中的应用不开放"), tr("只开放白名单里的应用"))

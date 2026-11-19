@@ -18,11 +18,18 @@ for s in focus time:0 time:1 time:2 weekly groups widget look settings about gui
   case "$s" in focus|time:*|weekly|settings) adb shell input swipe 540 1900 540 500 400; shot "02-${s/:/-}-b" 2;; esac
 done
 
-# 课表格子：点一个空格（周末那几列）打开加课面板
+# 课表格子：点课块进编辑页、长按出菜单、点空格新建；专注页的设置、顺序
 adb shell am start -n $P/.MainActivity --es open time:0; sleep 3
-adb shell input swipe 540 1900 540 900 400; sleep 2
-adb shell input tap 1000 1500; shot 02-course-add 3
-adb shell input swipe 540 1900 540 600 400; shot 02-course-add-b 2
+adb shell input swipe 540 1900 540 500 400; sleep 2
+adb shell input tap 211 1027; shot 02-course-edit 3
+adb shell input swipe 540 1900 540 600 400; shot 02-course-edit-b 2
+adb shell input keyevent KEYCODE_BACK; sleep 1
+adb shell input swipe 211 1027 211 1027 900; shot 02-course-menu 2
+adb shell input keyevent KEYCODE_BACK; sleep 1
+adb shell input tap 960 1027; shot 02-course-add 3
+adb shell input keyevent KEYCODE_BACK; sleep 1
+adb shell am start -n $P/.MainActivity --es open focus; sleep 3
+adb shell input tap 960 190; shot 02-focus-set 3
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
 # 停一下页（带「问一句」）、拦截页（每日用完 / 上课 / 打开次数）

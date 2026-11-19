@@ -81,6 +81,10 @@ private fun CourseTab() {
     var showTerm by remember { mutableStateOf(false) }
     var grid by remember { mutableStateOf(Scenes.gridView(c)) }
     var ver by remember { mutableStateOf(0) }
+    var group by remember { mutableStateOf<List<Slot>?>(null) }
+    var groupNew by remember { mutableStateOf(false) }
+    var copied by remember { mutableStateOf<Slot?>(null) }
+    var undo by remember { mutableStateOf<Pair<String, List<Slot>>?>(null) }
     var on by remember { mutableStateOf(Scenes.enabled(c)) }
     fun save(l: List<Slot>) { Scenes.setDesired(c, l); all = Scenes.desired(c) }
 
@@ -131,7 +135,7 @@ private fun CourseTab() {
     Row(Modifier.padding(top = 20.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(tr("我的课（{0}）", courses.size), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
         Text(tr("＋ 添加"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { val (f, t) = Scenes.secRange(c, 1, 2); editing = Slot("c" + System.currentTimeMillis(), "", setOf(Tasks.weekday()), f, t) }.padding(6.dp))
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { val (f, t) = Scenes.secRange(c, 1, 2); group = listOf(Slot("c" + System.currentTimeMillis(), "", setOf(Tasks.weekday()), f, t)); groupNew = true }.padding(6.dp))
     }
     FlowRowLite {
         for ((label, act) in listOf<Pair<String, () -> Unit>>(
@@ -146,22 +150,54 @@ private fun CourseTab() {
     if (courses.isEmpty() && !grid) Text(tr("还没有课。截图识别最快：在课表应用里截一张整周的图就行。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp)
     if (grid) {
         if (courses.isEmpty()) Text(tr("还没有课。截图识别最快，也可以直接点格子加。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 8.dp))
-        CourseGrid(courses, ver, onOpen = { editing = it }, onAdd = { d, sec ->
+        copied?.let { k ->
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(C.ClayPale).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("已复制「{0}」，点空格子粘贴", k.name), fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.weight(1f))
+                Text(tr("完成"), fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { copied = null }.padding(6.dp))
+            }
+        }
+        undo?.let { (label, prev) ->
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(C.Card).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("已删除「{0}」", label), fontSize = 13.sp, color = C.Soft, modifier = Modifier.weight(1f))
+                Text(tr("撤销"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { save(prev); undo = null; ver++ }.padding(6.dp))
+            }
+        }
+        CourseGrid(courses, ver, onOpen = { s -> group = courses.filter { it.name == s.name }.ifEmpty { listOf(s) }; groupNew = false }, onAdd = { d, sec ->
             val n = Scenes.secStarts(c).size
-            val (f, t) = Scenes.secRange(c, sec, minOf(sec + 1, n))
-            editing = Slot("c" + System.currentTimeMillis(), "", setOf(d), f, t)
-        }, onSettings = { showTerm = true })
+            val k = copied
+            if (k != null) {
+                val (a, b) = Scenes.secSpan(Scenes.secStarts(c), Scenes.secEnds(c), k.from, k.to)
+                val (f, t) = Scenes.secRange(c, sec, minOf(sec + (b - a), n))
+                save(all + k.copy(id = "c" + System.currentTimeMillis(), days = setOf(d), from = f, to = t)); ver++
+            } else {
+                val (f, t) = Scenes.secRange(c, sec, minOf(sec + 1, n))
+                group = listOf(Slot("c" + System.currentTimeMillis(), "", setOf(d), f, t)); groupNew = true
+            }
+        }, onSettings = { showTerm = true }, onCopy = { copied = it; undo = null }, onDelete = { s, d ->
+            val prev = all
+            save(all.mapNotNull { if (it.id != s.id) it else if (it.days.size > 1) it.copy(days = it.days - d) else null })
+            undo = s.name to prev; ver++
+        })
     } else for (d in 1..7) {
         val l = courses.filter { d in it.days }.sortedBy { it.from }
         if (l.isEmpty()) continue
         Text(dayLabel(d), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-        for (s in l) SlotRow(s) { editing = s }
+        for (s in l) SlotRow(s) { group = courses.filter { it.name == s.name }; groupNew = false }
     }
 
+    group?.let { g ->
+        val ids = g.map { it.id }.toSet()
+        CourseEditor(g, groupNew, onSave = { segs ->
+            save(all.filter { it.id !in ids } + segs); group = null; ver++
+        }, onDeleteAll = {
+            val prev = all
+            save(all.filter { it.id !in ids }); undo = (g.firstOrNull()?.name ?: "") to prev; group = null; ver++
+        }, onClose = { group = null })
+    }
     editing?.let { s -> CourseSheet(s, onSave = { n ->
-        // 同名课一起换颜色
-        val rest = all.filter { it.id != s.id }.map { if (it.kind == "course" && it.name == n.name && it.color != n.color) it.copy(color = n.color) else it }
-        save(rest + n); editing = null; ver++
+        save(all.filter { it.id != s.id } + n); editing = null; ver++
     }, onDelete = { save(all.filter { it.id != s.id }); editing = null; ver++ }, onClose = { editing = null }) }
     if (showTerm) TermSheet(onChange = { ver++ }, onClose = { showTerm = false })
     review?.let { r -> ReviewSheet(r, shot, onAdd = { picked ->
