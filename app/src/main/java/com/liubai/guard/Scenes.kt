@@ -173,8 +173,10 @@ object Scenes {
     }
 
     /** 读 .ics 文件（WakeUp 课程表、学校教务系统常能导出）。 */
-    fun fromIcs(c: Context, uri: Uri): List<Slot> =
-        parseIcs(c.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: return emptyList())
+    fun fromIcs(c: Context, uri: Uri): List<Slot> {
+        val raw = c.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: return emptyList()
+        return parseIcs(raw)
+    }
 
     fun parseIcs(raw: String): List<Slot> {
         val lines = ArrayList<String>()
