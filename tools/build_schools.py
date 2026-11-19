@@ -71,8 +71,15 @@ for x in json.load(open(os.path.join(bz, "utils/schools.json"), encoding="utf-8"
     t = by_url(url) or BZ_TYPE.get(x.get("type"), "generic")
     rows[name] = [(t, url, "b", "")]
 
+# 3) 留白手动核对过网址 / 类型的学校（来源 m）：覆盖上面两份列表
+MANUAL = {
+    # 教务部选课通知（jwb.cumt.edu.cn）给的入口；只能校园网或学校 VPN 客户端访问，用教务系统自己的密码
+    "中国矿业大学": [("zf", "http://jwxt.cumt.edu.cn/jwglxt/", "m", "新正方；需校园网或学校 VPN（aTrust）；用教务系统密码")],
+}
+rows.update(MANUAL)
+
 with open(out, "w", encoding="utf-8") as f:
-    f.write("# 学校\t类型\t网址\t来源\t入口  —— 由 tools/build_schools.py 生成；来源 s=ShiGuangSchedule/shiguang_warehouse (MIT)，b=baoozak/timetable (MIT)\n")
+    f.write("# 学校\t类型\t网址\t来源\t入口  —— 由 tools/build_schools.py 生成；来源 s=ShiGuangSchedule/shiguang_warehouse (MIT)，b=baoozak/timetable (MIT)，m=留白手动核对\n")
     n = 0
     for name in sorted(rows):
         for t, url, src, note in rows[name]:

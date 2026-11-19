@@ -1,4 +1,4 @@
-# 学校	类型	网址	来源	入口  —— 由 tools/build_schools.py 生成；来源 s=ShiGuangSchedule/shiguang_warehouse (MIT)，b=baoozak/timetable (MIT)
+# 学校	类型	网址	来源	入口  —— 由 tools/build_schools.py 生成；来源 s=ShiGuangSchedule/shiguang_warehouse (MIT)，b=baoozak/timetable (MIT)，m=留白手动核对
 三亚中瑞酒店管理职业学院	cx	https://his.jxjy.chaoxing.com/login	b	
 三亚学院	qz	http://10.10.181.1/	b	
 三亚理工职业学院	qz	https://jwxt.ucsanya.com/sylgzyxy_jsxsd/	b	
@@ -69,7 +69,7 @@
 中国石油大学(华东)	qz	https://webvpn.upc.edu.cn/users/sign_in	s	中国石油大学(华东)教务适配
 中国石油大学(华东)	generic	https://degrees.upc.edu.cn/	s	中国石油大学(华东)研究生综合管理系统
 中国石油大学（北京）克拉玛依校区	eams	https://eams.cupk.edu.cn/student/	s	中国石油大学(北京)克拉玛依校区本科教务系统
-中国矿业大学	zf	http://jwxt.cumt.edu.cn/jwglxt/	b	
+中国矿业大学	zf	http://jwxt.cumt.edu.cn/jwglxt/	m	新正方；需校园网或学校 VPN（aTrust）；用教务系统密码
 中国矿业大学徐海学院	zf	http://jwxt.cumtxh.cn/jwglxt/xtgl/login_slogin.html	b	
 中国科学技术大学	generic	https://id.ustc.edu.cn/cas/login?service=https%3A%2F%2Fjw.ustc.edu.cn%2Fucas-sso%2Flogin	s	中国科学技术大学本科教务
 中国科学技术大学	zf	https://yjs1.ustc.edu.cn/gsapp/sys/yjsrzfwapp/dbLogin/main.do	s	中国科学技术大学研究生教务

@@ -1,12 +1,13 @@
 # 第三方声明 / Third-party notices
 
 留白的教务导入参考并移植了以下开源项目的逻辑和数据。只用了 MIT 许可的部分；GPL 项目（如 Dawn-Course、sleepy、Saafo/uestc-coursetable-parser）没有复制任何代码，最多只核对过接口名。
+`kqakqakqa/xiaoai-schedule-parser`（中国矿业大学新正方分支）没有许可证：只看了接口名和参数名（`xskbcx_cxXsgrkb.html`、`gnmkdm=N2151`、`kzlx=ck`、`xsdm`），没有复制代码。
 
 ## ShiGuangSchedule/shiguang_warehouse — MIT
 - 来源：https://github.com/ShiGuangSchedule/shiguang_warehouse （读取时的提交 250c4f9）
 - 用在：`app/src/main/java/com/liubai/guard/JwAdapters.kt`（正方网格/列表视图、新 URP 页面、青果「周次[节次]」、超星 sdpkkbList 接口与连排合并的解析思路）、
   `Jw.kt` 里强智的行标签节次与单双周字段、`WebImport.kt` 里超星的取数流程，以及树维 eams 直接请求课表的参数（`resources/UESTC/uestc.js`：
-  `courseTableForStd!courseTable.action` 的 ignoreHead / setting.kind / project.id / semester.id / ids，电子科大学期 id 规律 483 起每学期 +20）、`Jw.kt` 树维解析里跳过「停课」记录；
+  `courseTableForStd!courseTable.action` 的 ignoreHead / setting.kind / project.id / semester.id / ids，电子科大学期 id 规律 483 起每学期 +20）、`Jw.kt` 树维解析里跳过「停课」记录；`JwScript.kt` 青果新版接口 `wsxk/xkjg.ckdgxsxdkchj_data10319.jsp?params=base64(xn=..&xq=..)`（`resources/HIST/hist_01.js`）；
   `app/src/main/assets/schools.tsv` 中来源标 `s` 的学校和入口网址（来自各校 `adapters.yaml` 的 `import_url`）。
 - 拾光课程表主仓库 XingHeYuZhuan/shiguangschedule 为 Apache-2.0；本项目没有使用它的代码，只用了上面这个 MIT 的适配脚本仓库。
 

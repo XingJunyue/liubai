@@ -59,8 +59,22 @@ fun schoolsOf(c: Context): List<School> = schoolCache ?: try {
     Schools.parse(c.assets.open("schools.tsv").bufferedReader().use { it.readText() }).also { schoolCache = it }
 } catch (x: Exception) { emptyList() }
 
-private class Bridge(val cb: (String) -> Unit) {
+private class Bridge(val cb: (String) -> Unit, val onStep: (Int, String) -> Unit) {
     @JavascriptInterface fun post(s: String) { Handler(Looper.getMainLooper()).post { cb(s) } }
+    @JavascriptInterface fun step(t: Int, s: String) { Handler(Looper.getMainLooper()).post { onStep(t, s) } }
+}
+
+/** 导入失败：哪一步、给用户看的话、可复制的诊断信息。 */
+private class JwFail(val code: String, val msg: String, val diag: String)
+
+private fun failMsg(code: String, step: String, err: String): String = when (code) {
+    "login" -> tr("登录未完成：请先在网页里登录（二次认证也要做完），再点导入。")
+    "notfound" -> tr("没找到课表：教务系统没有返回课表数据。可以在网页里打开「我的课表」再点导入，或者换一个教务类型。")
+    "empty" -> tr("解析为空：拿到了数据，但没认出课程。可以换一个教务类型试试，或者复制诊断信息发给开发者。")
+    "network" -> tr("请求失败（{0}）：教务系统没有响应。检查网络（有的学校要校园网或学校的 VPN），再点重试。", JwOutcome.scrub(err, 40))
+    "timeout" -> tr("超时：卡在「{0}」这一步。点重试；还不行就复制诊断信息。", tr(JwOutcome.stepLabel(step)))
+    "nojwapp" -> tr("找不到教务系统的地址。用 WebVPN 时，请先在网页里打开「我的课表」页面再点导入。")
+    else -> tr("导入失败：{0}", JwOutcome.scrub(err, 120))
 }
 
 @Composable
@@ -162,6 +176,8 @@ private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
                                         modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(6.dp)).background(C.Sand).padding(horizontal = 5.dp, vertical = 1.dp))
                                 }
                                 Text(tr(kn) + " · " + (android.net.Uri.parse(sc.url).host ?: sc.url), fontSize = 11.sp, color = C.Faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                // 手动核对过的学校带一句说明（网络要求、用哪个密码），数据本身是中文
+                                if (sc.src == "m" && sc.note.isNotEmpty()) Text(sc.note, fontSize = 11.sp, color = C.Soft, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                             Text("›", fontSize = 18.sp, color = C.Faint)
                         }
@@ -213,7 +229,12 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
     var addr by remember { mutableStateOf(start) }
     var progress by remember { mutableStateOf(0) }
     var busy by remember { mutableStateOf(false) }
-    var err by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf<JwFail?>(null) }
+    var tok by remember { mutableStateOf(0) }          // 每次导入一个编号；超时或重试后，旧脚本晚到的结果直接丢掉
+    var stepNow by remember { mutableStateOf("start") }
+    var lastArg by remember { mutableStateOf<String?>(null) }
+    var pending by remember { mutableStateOf(false) }   // 页面还在加载时点了导入：加载完再自动导入
+    var loading by remember { mutableStateOf(false) }   // onPageStarted 到 onPageFinished 之间（跳转、WebVPN 重定向中）
     var campuses by remember { mutableStateOf<List<Pair<String, String>>?>(null) }
     var wv by remember { mutableStateOf<WebView?>(null) }
     // 电脑版网页：有的统一认证 / 二次认证页面在手机版模板下显示不出来，换成电脑浏览器的标识再加载
@@ -224,30 +245,53 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
     fun go(u0: String) {
         val u = u0.trim().let { if (it.isEmpty() || it.contains("://")) it else "https://$it" }
         if (u.isEmpty()) return
-        addr = u; err = null
+        addr = u; err = null; busy = false; pending = false; tok++
         if (kind != "neu") prefs(c).edit().putString("url_$kind", u).apply()
         if (prefs(c).getString("last_kind", null) == kind) prefs(c).edit().putString("last_url", u).apply()
         wv?.loadUrl(u)
     }
+    val jsKind = if (kind == "neu") "wisedu" else kind
+    fun hostOf(u: String) = try { android.net.Uri.parse(u).host ?: "" } catch (x: Exception) { "" }
+    fun fail(code: String, e: String, j: JSONObject?) {
+        busy = false; pending = false
+        val d = j?.optJSONObject("diag")
+        val ua = wv?.settings?.userAgentString ?: ""
+        val text = JwOutcome.diagText(BuildConfig.VERSION_NAME + if (BuildConfig.PREVIEW) " preview" else "", jsKind, hostOf(addr), stepNow, code, e, d,
+            j?.optJSONArray("html")?.length() ?: 0, j?.optString("json", "")?.isNotBlank() == true, JwOutcome.uaLabel(ua, desktop),
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm Z", java.util.Locale.US).format(java.util.Date()))
+        err = JwFail(code, failMsg(code, stepNow, e), text)
+        if (BuildConfig.DEBUG) android.util.Log.i("LiubaiTest", "JW fail $code step=$stepNow err=$e")
+    }
     fun grab(arg: String?) {
         val w = wv ?: return
-        busy = true; err = null
-        w.evaluateJavascript(jwScript(if (kind == "neu") "wisedu" else kind, arg), null)
+        if (busy) return                                   // 连点只算一次
+        lastArg = arg; err = null; busy = true; stepNow = "start"
+        val t = ++tok
+        if (loading && progress < 100) { pending = true; stepNow = "page" }   // 等页面加载完（onPageFinished 里接着导）
+        else w.evaluateJavascript(jwScript(jsKind, arg, t), null)
+        // 看门狗：90 秒没有结果就报超时，按钮恢复可点
+        scope.launch {
+            kotlinx.coroutines.delay(90_000)
+            if (busy && tok == t) { tok++; fail("timeout", "timeout", null) }
+        }
     }
-    val handle: (String) -> Unit = { s ->
+    val handle: (String) -> Unit = handle@{ s ->
         val j = try { JSONObject(s) } catch (x: Exception) { JSONObject().put("ok", false).put("err", "bad result") }
-        if (!j.optBoolean("ok")) { busy = false; err = friendly(j.optString("err")); if (BuildConfig.DEBUG) android.util.Log.i("LiubaiTest", "JW error ${j.optString("err")}") }
+        if (j.optInt("token", -1) != tok || !busy) return@handle      // 过期的结果
+        val d = j.optJSONObject("diag")
+        d?.optString("step")?.takeIf { it.isNotEmpty() }?.let { stepNow = it }
+        if (!j.optBoolean("ok")) { val e = j.optString("err"); fail(JwOutcome.failStep(false, e, d, 0) ?: "error", e, j) }
         else if (j.optString("need") == "campus") {
             busy = false
             val a = j.optJSONArray("campuses")
             campuses = (0 until (a?.length() ?: 0)).map { a!!.getJSONObject(it) }.map { it.optString("id") to it.optString("name") }
         } else scope.launch {
-            val r = withContext(Dispatchers.Default) { try { Jw.parse(if (kind == "neu") "wisedu" else kind, s) } catch (x: Exception) { emptyList() } }
-            busy = false
+            stepNow = "parse"
+            val r = withContext(Dispatchers.Default) { try { Jw.parse(jsKind, s) } catch (x: Exception) { emptyList() } }
             if (BuildConfig.DEBUG) android.util.Log.i("LiubaiTest", "JW parsed ${r.size} kind=$kind")
-            if (r.isEmpty()) err = if (kind == "eams") tr("没读到课表。请确认已经登录（二次认证也要做完），再点导入；也可以换一个教务类型试试。")
-                else tr("没在这个页面找到课表。请先登录并打开「我的课表」页面，再点导入；也可以换一个教务类型试试。")
-            else { CookieManager.getInstance().flush(); onParsed(r) }
+            val code = JwOutcome.failStep(true, "", d, r.size)
+            if (code != null) fail(code, d?.optString("err").orEmpty(), j)
+            else { busy = false; CookieManager.getInstance().flush(); onParsed(r) }
         }
     }
     val onResult = rememberUpdatedState(handle)
@@ -288,11 +332,12 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
             AndroidView(factory = { ctx ->
                 WebView(ctx).apply {
                     setupJwWebView(this, desktop)
-                    addJavascriptInterface(Bridge { onResult.value(it) }, "LiubaiJw")
+                    addJavascriptInterface(Bridge({ onResult.value(it) }, { t, st -> if (t == tok) stepNow = st }), "LiubaiJw")
                     webViewClient = object : WebViewClient() {
-                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) { addr = url }
+                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) { addr = url; loading = true }
                         override fun onPageFinished(view: WebView, url: String) {
-                            addr = url; CookieManager.getInstance().flush()
+                            addr = url; loading = false; CookieManager.getInstance().flush()
+                            if (pending && busy) { pending = false; view.evaluateJavascript(jwScript(jsKind, lastArg, tok), null) }
                             if (TimetableTest.autoImport) { TimetableTest.autoImport = false; grab(null) }
                         }
                         override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean = !jwWebScheme(req.url)
@@ -304,18 +349,31 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
             }, onRelease = { it.stopLoading(); it.destroy() }, modifier = Modifier.fillMaxSize())
             if (start.isBlank() && progress == 0) Column(Modifier.fillMaxSize().background(C.Cream).padding(28.dp)) {
                 Text(tr("在上面输入教务系统的网址"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-                Text(tr("比如 jwxt.xxx.edu.cn。登录后打开「我的课表」或「学期课表」页面，再点下面的「导入课表」。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
+                Text(tr("比如 jwxt.xxx.edu.cn。登录后直接点下面的「导入课表」；读不到时再打开「我的课表」页面试试。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
             }
             // 底部：提示 + 导入按钮
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(14.dp).navigationBarsPadding()) {
                 err?.let { e ->
-                    Text(e, fontSize = 12.sp, color = C.ClayDeep, lineHeight = 17.sp, modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(14.dp))
-                        .clip(RoundedCornerShape(14.dp)).background(C.Card).clickable { err = null }.padding(12.dp))
+                    Column(Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)).background(C.Card).padding(12.dp)) {
+                        Text(e.msg, fontSize = 12.sp, color = C.ClayDeep, lineHeight = 17.sp)
+                        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("重试"), fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(C.Clay).clickable { grab(lastArg) }.padding(horizontal = 12.dp, vertical = 6.dp))
+                            Text(tr("复制诊断信息"), fontSize = 12.sp, color = C.Ink,
+                                modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(C.Sand).clickable {
+                                    val cm = c.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("liubai-jw", e.diag))
+                                    android.widget.Toast.makeText(c, tr("已复制，可以发给开发者"), android.widget.Toast.LENGTH_SHORT).show()
+                                }.padding(horizontal = 12.dp, vertical = 6.dp))
+                            Spacer(Modifier.weight(1f))
+                            Text("×", fontSize = 16.sp, color = C.Faint, modifier = Modifier.clip(CircleShape).clickable { err = null }.padding(horizontal = 8.dp))
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                 }
                 Row(Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(C.Card).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (busy) tr("正在读取课表…") else if (kind == "eams") tr("登录后直接点导入，不用打开课表页面") else tr("登录后打开课表页面，再点导入"), fontSize = 12.sp, color = C.Soft, lineHeight = 16.sp, modifier = Modifier.weight(1f),
+                    Text(if (busy) (if (pending) tr("页面还在加载，加载完自动导入…") else tr("正在{0}…", tr(JwOutcome.stepLabel(stepNow)))) else if (kind in setOf("generic", "cf", "nr", "umooc")) tr("登录后打开课表页面，再点导入") else tr("登录后直接点导入，不用打开课表页面"), fontSize = 12.sp, color = C.Soft, lineHeight = 16.sp, modifier = Modifier.weight(1f),
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Box(Modifier.clip(RoundedCornerShape(16.dp)).background(if (busy) C.Track else C.Clay).clickable(enabled = !busy) { grab(null) }.padding(horizontal = 18.dp, vertical = 12.dp)) {
                         if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = C.Clay, strokeWidth = 2.dp)
@@ -332,7 +390,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                 Text(tr("导入不出来时换一个试试，网页和登录状态不变"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(bottom = 8.dp))
                 for (k in Jw.KINDS) Text(tr(k.name) + if (k.exp) " · " + tr("实验性") else "", fontSize = 15.sp,
                     color = if (k.id == kind) C.ClayDeep else C.Ink, fontWeight = if (k.id == kind) FontWeight.SemiBold else FontWeight.Normal,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { pickKind = false; err = null; onKind(k.id) }.padding(vertical = 11.dp, horizontal = 4.dp))
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { pickKind = false; err = null; busy = false; tok++; onKind(k.id) }.padding(vertical = 11.dp, horizontal = 4.dp))
             }
         },
         confirmButton = {}, dismissButton = { TextButton({ pickKind = false }) { Text(tr("取消"), color = C.Soft) } })
@@ -350,114 +408,3 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
     }
 }
 
-private fun friendly(e: String): String = when {
-    e.contains("jwapp") -> tr("找不到教务系统的地址。用 WebVPN 时，请先在网页里打开「我的课表」页面再点导入。")
-    e.contains("JSON") || e.contains("Unexpected token") || e.contains("term") -> tr("读不到课表，可能还没登录或登录已过期。请先登录，再点导入。")
-    e.contains("HTTP") || e.contains("Failed to fetch") -> tr("教务系统没有响应：{0}。登录后再试，或者换个网络。", e.take(80))
-    else -> tr("导入失败：{0}", e.take(120))
-}
-
-/** 注入网页的脚本：按教务类型抓数据，通过 LiubaiJw.post 回传 JSON。 */
-fun jwScript(kind: String, arg: String?): String {
-    val k = JSONObject.quote(kind); val a = if (arg == null) "null" else JSONObject.quote(arg)
-    return """
-(async function(){
-const K=$k, ARG=$a;
-const P=o=>{try{LiubaiJw.post(JSON.stringify(o))}catch(e){}};
-function docs(){const out=[];const seen=new Set();function walk(w,d){if(d>4)return;try{const doc=w.document;if(!doc||seen.has(doc))return;seen.add(doc);out.push(doc);for(const f of doc.querySelectorAll('iframe,frame')){try{if(f.contentWindow)walk(f.contentWindow,d+1)}catch(e){}}}catch(e){}}walk(window,0);try{if(window.top!==window)walk(window.top,0)}catch(e){}return out;}
-function htmls(){return docs().map(d=>{try{return d.documentElement.outerHTML}catch(e){return ''}});}
-function hrefs(){const out=[];for(const d of docs()){try{out.push(d.location.href)}catch(e){}try{for(const e of d.querySelectorAll('a[href],iframe[src],frame[src]'))out.push(e.href||e.src)}catch(e){}}return out;}
-function base(marker){for(const h of hrefs()){const i=h.indexOf(marker);if(i>=0)return h.substring(0,i);}return null;}
-async function req(url,body){const o={method:body==null?'GET':'POST',credentials:'include'};if(body!=null){o.headers={'x-requested-with':'XMLHttpRequest','content-type':'application/x-www-form-urlencoded; charset=UTF-8'};o.body=body;}const r=await fetch(url,o);if(!r.ok)throw new Error('HTTP '+r.status);return await r.text();}
-async function reqDecoded(url){const r=await fetch(url,{credentials:'include'});if(!r.ok)throw new Error('HTTP '+r.status);const buf=await r.arrayBuffer();const ct=(r.headers.get('content-type')||'').toLowerCase();let cs=(ct.match(/charset=([\w-]+)/)||[])[1];if(!cs){const t=new TextDecoder('utf-8').decode(buf);if(t.indexOf('\ufffd')<0)return t;cs='gbk';}try{return new TextDecoder(cs).decode(buf);}catch(e){return new TextDecoder('utf-8').decode(buf);}}
-function enc(o){return Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(o[k])).join('&');}
-function val(id){for(const d of docs()){try{const e=d.getElementById(id);if(e&&e.value)return e.value;}catch(x){}}return null;}
-try{
- if(K==='wisedu'){
-  let pre=base('/jwapp/');
-  if(pre==null){ if(location.host.indexOf('webvpn')>=0) throw new Error('jwapp'); pre=location.origin; }
-  const tj=JSON.parse(await req(pre+'/jwapp/sys/jwpubapp/modules/gg/cxmrxnxq.do','CSDM=SYS&ZCSDM=DQXNXQDM&SFSY=1'));
-  const row=(((tj.datas||{}).cxmrxnxq||{}).rows||[])[0]; if(!row) throw new Error('term');
-  const xn=row.XNXQDM; let campus=ARG;
-  if(campus==null){
-   let cs=[]; try{const cj=JSON.parse(await req(pre+'/jwapp/sys/kbapp/api/wdkbcx/getMyScheduledCampus.do',enc({XNXQDM:xn})));cs=((cj.datas||{}).getMyScheduledCampus)||[];}catch(e){}
-   if(cs.length>1){P({ok:true,need:'campus',term:row.XNXQMC||xn,campuses:cs.map(c=>({id:String(c.id),name:String(c.name)}))});return;}
-   campus=cs.length?String(cs[0].id):'';
-  }
-  const b={XNXQDM:xn}; if(campus) b.XQDM=campus;
-  const dj=await req(pre+'/jwapp/sys/kbapp/api/wdkbcx/getMyScheduleDetail.do',enc(b));
-  P({ok:true,kind:K,term:row.XNXQMC||xn,termRow:row,json:dj}); return;
- }
- if(K==='zf'){
-  let b=base('/jwglxt/'); b=b!=null?b+'/jwglxt':(base('/kbcx/')||base('/xtgl/')||location.origin);
-  const now=new Date(); const y=now.getFullYear(), m=now.getMonth()+1;
-  const xnm=val('xnm')||String(m>=8?y:y-1); const xqm=val('xqm')||((m>=8||m<=1)?'3':'12');
-  const ok=t=>{try{const j=JSON.parse(t);return ((j.kbList||(j.data||{}).kbList)||[]).length>0;}catch(e){return false;}};
-  let json=null; try{json=await req(b+'/kbcx/xskbcx_cxXsKb.html?gnmkdm=N2151',enc({xnm:xnm,xqm:xqm,kzlx:'ck'}));}catch(e){}
-  // 有的学校只开了另一个接口（baoozak/timetable zhengfang_new.js）
-  if(!json||!ok(json)){try{const t=await req(b+'/kbcx/xskbcx_cxXsgrkb.html?gnmkdm=N253508',enc({xnm:xnm,xqm:xqm}));if(ok(t))json=t;}catch(e){}}
-  P({ok:true,kind:K,json:json,html:htmls()}); return;
- }
- if(K==='cx'){
-  // 超星：页面上的 xhid / xqdm / 学期下拉框，没有就去课表页拿，再请求 sdpkkbList（shiguang_warehouse chaoxing.js）
-  const o=base('/admin/')||location.origin; const pick=(d,id)=>{try{const e=d.getElementById(id);return (e&&e.value)||null;}catch(x){return null;}};
-  let xhid=null,xqdm=null,xnxq=null;
-  for(const d of docs()){xhid=xhid||pick(d,'xhid');xqdm=xqdm||pick(d,'xqdm');xnxq=xnxq||pick(d,'xnxq1');}
-  if(!xhid||!xqdm){try{const d=new DOMParser().parseFromString(await req(o+'/admin/pkgl/xskb/queryKbForXsd',null),'text/html');xhid=xhid||pick(d,'xhid');xqdm=xqdm||pick(d,'xqdm');xnxq=xnxq||pick(d,'xnxq1');}catch(e){}}
-  if(!xnxq){const n=new Date(),y=n.getFullYear(),m=n.getMonth()+1;xnxq=m>=8?y+'-'+(y+1)+'-1':(m<=1?(y-1)+'-'+y+'-1':(y-1)+'-'+y+'-2');}
-  let json=null; if(xhid&&xqdm){try{json=await req(o+'/admin/xsd/pkgl/xskb/sdpkkbList?'+enc({xnxq:xnxq,xhid:xhid,xqdm:xqdm,xskbxslx:'0'}),null);}catch(e){}}
-  P({ok:true,kind:K,json:json,html:htmls()}); return;
- }
- if(K==='urp'){
-  // 旧 URP：当前页没有选课列表就去取「本学期课表」（页面常是 GBK）
-  const hs=htmls();
-  if(!hs.some(h=>h.indexOf('课程名')>=0)){ const b=base('/xkAction.do')||base('/menu/')||location.origin; try{hs.push(await reqDecoded(b+'/xkAction.do?actionType=6'));}catch(e){} }
-  P({ok:true,kind:K,html:hs}); return;
- }
- if(K==='qz'){
-  const hs=htmls();
-  if(!hs.some(h=>h.indexOf('kbcontent')>=0)){ const b=(base('/jsxsd')||location.origin)+'/jsxsd/xskb/xskb_list.do'; try{hs.push(await req(b,null));}catch(e){} }
-  P({ok:true,kind:K,html:hs}); return;
- }
- if(K==='urpnew'){
-  const b=base('/student/')||location.origin; let json=null;
-  for(const p of ['/student/courseSelect/thisSemesterCurriculum/ajaxStudentSchedule/callback','/student/courseSelect/thisSemesterCurriculum/ajaxStudentSchedule/curr/callback']){
-   try{const t=await req(b+p,'');if(t.trim().charAt(0)==='{'){json=t;break;}}catch(e){}
-  }
-  P({ok:true,kind:K,json:json,html:htmls()}); return;
- }
- if(K==='eams'){
-  // 树维 eams：不靠用户点菜单（WebView 里旧版首页常只剩空架子）。直接带着登录态请求课表接口：
-  // courseTableForStd.action 拿 ids / 学期 id → courseTableForStd!courseTable.action（ignoreHead=1）→ 里面的 new TaskActivity(...)。
-  // 参数名参考 shiguang_warehouse 的 UESTC 适配（MIT，见 THIRD_PARTY_NOTICES.md）。
-  const hs=htmls(); const has=t=>!!t&&/new\s+TaskActivity\s*\(/.test(t);
-  if(hs.some(has)){P({ok:true,kind:K,html:hs});return;}
-  let b=base('/eams/'); b=b!=null?b+'/eams':(base('/courseTableForStd')||base('/home')||location.origin);
-  const pickIds=t=>{let m=t.match(/addInput\(\s*form\s*,\s*["']ids["']\s*,\s*["'](\d+)["']/)||t.match(/name=["']ids["'][^>]*value=["'](\d+)["']/)||t.match(/value=["'](\d+)["'][^>]*name=["']ids["']/)||t.match(/[?&]ids=(\d+)/);return m?m[1]:null;};
-  const pickSem=t=>{let m=t.match(/name=["']semester\.id["'][^>]*value=["'](\d+)["']/)||t.match(/value=["'](\d+)["'][^>]*name=["']semester\.id["']/)||t.match(/semesterCalendar\(\s*\{[^}]*value\s*:\s*["']?(\d+)/)||t.match(/["']semester\.id["']\s*,\s*["']?(\d+)/)||t.match(/semester\.id=(\d+)/);return m?m[1]:null;};
-  const cookieSem=()=>{const m=document.cookie.match(/(?:^|;\s*)semester\.id=(\d+)/);return m?m[1]:null;};
-  let ids=null,sem=null,page='';
-  for(const h of hs){ids=ids||pickIds(h);sem=sem||pickSem(h);}
-  if(!ids||!sem){for(const p of ['/courseTableForStd.action','/courseTableForStd!index.action']){try{page=await req(b+p,null);ids=ids||pickIds(page);sem=sem||pickSem(page);if(ids&&sem)break;}catch(e){}}}
-  sem=sem||cookieSem();
-  const sems=[]; if(sem)sems.push(sem);
-  // 电子科大：学期 id 有规律（2025-2026 第一学期 = 483，每学期 +20；同上 MIT 适配）。读不到时按日期推当前和上一个学期。
-  if(location.host.indexOf('uestc.edu.cn')>=0){const n=new Date();const y=n.getFullYear(),m=n.getMonth()+1;const sy=m>=8?y:y-1;const id=483+(sy-2025)*40+((m>=8||m<=1)?0:20);for(const x of [id,id-20,id+20])if(sems.indexOf(String(x))<0)sems.push(String(x));}
-  if(!sems.length)sems.push('');
-  let got=null; const tried=[];
-  outer: for(const s of sems){
-   for(const withIds of (ids?[true,false]:[false])){
-    const o={'ignoreHead':'1','setting.kind':'std','startWeek':'','project.id':'1'}; if(s)o['semester.id']=s; if(withIds)o.ids=ids;
-    const q=enc(o); tried.push(q);
-    try{const t=await req(b+'/courseTableForStd!courseTable.action',q);if(has(t)){got=t;break outer;}}catch(e){}
-    try{const t=await req(b+'/courseTableForStd!courseTable.action?'+q,null);if(has(t)){got=t;break outer;}}catch(e){}
-   }
-  }
-  if(got)hs.push(got); else if(page)hs.push(page);
-  P({ok:true,kind:K,html:hs,eams:{base:b,ids:ids,semester:sem,tried:tried.length}}); return;
- }
- P({ok:true,kind:K,html:htmls()});
-}catch(e){P({ok:false,err:String(e&&e.message||e)});}
-})();
-"""
-}

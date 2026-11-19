@@ -31,8 +31,12 @@
 ## 教务导入现状
 - 真实登录验证：仅东大金智。其他全部只有构造的样例页面 / JSON 单测（`JwTest`、`JwAdaptersTest`，样例在 `app/src/test/resources/jw/`），没有真实账号测过。对外说明时如实讲，不夸大。
 - 专用解析：正方（JSON 两个接口 + 页面网格/列表 + 旧版）、强智、新 URP（接口 + 页面）、旧 URP（选课列表）、树维 eams、青果、超星（sdpkkbList 接口）、南软（tb_kcb）。乘方、优慕课仍标「实验性」，只靠通用表格识别；南软也仍标实验性。金智（东大）的解析和 `Jw.parse` 里 wisedu/neu 的分支保持原样，不要动。
-- 解析在 `Jw.kt`（原有）和 `JwAdapters.kt`（jw-adapters 分支移植的），抓取脚本在 `WebImport.kt` 的 `jwScript`。
+- 解析在 `Jw.kt`（原有）和 `JwAdapters.kt`（jw-adapters 分支移植的），抓取脚本在 `JwScript.kt` 的 `jwScript`（导入界面在 `WebImport.kt`）。
 - 树维 eams：「导入课表」不要求用户打开课表页（WebView 里旧版首页常是没菜单的空架子），脚本自己 GET `courseTableForStd.action` 取 ids / 学期 id，再 POST `courseTableForStd!courseTable.action`（ignoreHead=1、setting.kind=std、project.id=1、semester.id、ids）；电子科大读不到学期 id 时按日期推（483 起每学期 +20）。`EamsFetchTest` 用 node 模拟页面跑真正的脚本（样例在 `test/resources/jw/eams_uestc/`），冒烟测试用 `tools/fake_eams.py` 在模拟器上端到端跑一遍。都是手写样例，电子科大真实账号没验证过。
+- 所有教务类型都是「登录后直接点导入」：取数脚本在 `JwScript.kt`（`jwScript`），按类型直接请求课表接口（正方 cxXsKb → 新正方 V9 cxXsgrkb?gnmkdm=N2151 带 kzlx=ck/xsdm → cxXsgrkb?gnmkdm=N253508；不在课表页时先取 xskbcx_cxXskbcxIndex.html 读默认学年学期；强智 xskb_list.do；新 URP thisSemesterCurriculum callback；旧 URP xkAction.do?actionType=6；超星 queryKbForXsd → sdpkkbList；青果新版 wsxk 接口 / 旧版 Pri_StuSel_rpt；树维见下），请求不到再读当前页面和里面的 iframe/frame。金智（东大）的请求和参数没改，只加了步骤上报和超时。
+- 导入的可靠性：每个请求 20 秒超时；整次导入 90 秒看门狗；页面还在跳转（onPageStarted 到 onPageFinished，比如 WebVPN 重定向）时点导入会等加载完再跑；每次导入带编号，过期结果丢掉；连点只算一次。失败分「登录未完成 / 没找到课表 / 解析为空 / 请求失败 / 超时」，有「重试」和「复制诊断信息」（`JwOutcome.diagText`：版本、类型、主机名、步骤、HTTP 状态、接口路径，不含参数、Cookie、学号）。东大以前「卡住」最可能的原因：在页面跳转时注入脚本被丢掉，按钮一直转圈——现在有等待和超时，但没有在东大真实账号上复现确认。
+- `JwFetchTest`（node 跑真脚本 + `test/resources/jw/fetch/harness.js` 假接口）覆盖各类型取数路径、会话过期、接口卡死超时、frame 里的课表。全是手写样例。
+- 学校列表来源 m = 留白手动核对（`tools/build_schools.py` 的 MANUAL）：中国矿业大学 http://jwxt.cumt.edu.cn/jwglxt/（新正方，只能校园网或学校 aTrust VPN，用教务系统密码；WebVPN 已停用）。http 网址以前因为没开 cleartext 在内置浏览器里根本打不开。
 - 内置浏览器设置在 `JwWebView.kt`：UA 去掉「; wv」「Version/4.0」（像普通手机 Chrome），网页上方「电脑版」开关换桌面 UA；window.open/新窗口放回同一页；alert/confirm/prompt 弹真对话框；第三方 Cookie、DOM Storage 开。清单里开了 `usesCleartextTraffic`（不少学校教务是 http）。
 - 已知问题：电子科大统一认证（idas，金智 authserver）二次认证页 `reAuthCheck/reAuthLoginView.do` 在内置浏览器里空白（用户朋友反馈，手机浏览器正常）。已按上面做了通用修复，但没有真实账号，没法确认修好；如果仍空白，先让用户试「电脑版」。
 - 学校搜索：`assets/schools.tsv`（学校\t类型\t网址\t来源\t入口），由 `tools/build_schools.py` 从 shiguang_warehouse（来源 s，社区为该校写过适配）和 baoozak/timetable（来源 b，类型多为猜测，按网址特征修正）生成；`Schools.kt` 搜索，导入页搜索框输入学校名即出结果，点了填网址和类型。手动选类型、输网址照旧；网页页面上方的类型名可点开换类型。列表网址/类型都没验证过，界面上有提示。

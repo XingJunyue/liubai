@@ -59,7 +59,7 @@ class EamsFetchTest {
     @Test fun fetchFromSkeletonHome() {
         val o = run("std.html", "strict")
         check(o)
-        assertEquals("523", o.getJSONObject("result").getJSONObject("eams").optString("semester"))
+        assertEquals("523", o.getJSONObject("result").getJSONObject("diag").optString("term"))
     }
 
     /** 页面上读不到学期 id：电子科大按日期推学期 id 再请求。 */

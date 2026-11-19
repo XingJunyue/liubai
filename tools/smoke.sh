@@ -78,6 +78,14 @@ shot 07-eams-import 3
 adb logcat -d -s LiubaiTest LiubaiWeb > shots/eams.txt
 cat shots/eams.txt | grep "JW " || true
 grep -q "JW parsed 2 kind=eams" shots/eams.txt || { echo "EAMS fetch import failed"; cat shots/fake-eams.log; fail=1; }
+# 导入失败时：显示卡在哪一步 + 重试 + 复制诊断信息（故意选错类型：强智接口在假服务器上不存在）
+go table:0; sleep 1
+adb logcat -c
+adb shell am start -n $P/.MainActivity --es open table:6 --es jwkind qz --es jwurl http://127.0.0.1:8765/eams/home.action --ez jwauto true > /dev/null
+for i in $(seq 1 20); do sleep 2; adb logcat -d -s LiubaiTest | grep -q "JW " && break; done
+shot 07-jw-fail 3
+adb logcat -d -s LiubaiTest | grep "JW " | tee -a shots/eams.txt
+adb logcat -d -s LiubaiTest | grep -q "JW fail notfound" || { echo "expected 'notfound' failure card"; fail=1; }
 kill $FE 2>/dev/null
 # 教务导入：按学校名搜索（预填搜索词）
 go table:0; sleep 1
