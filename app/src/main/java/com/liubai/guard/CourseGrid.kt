@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -325,7 +326,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
     // ----- 弹窗 -----
     edit?.let { (s0, d) ->
         val start = if (d != null && s0.days.size > 1) s0.copy(days = setOf(d)) else s0
-        CourseSheet(start, isNew = editNew, onSave = { n ->
+        key(s0.id, d) { CourseSheet(start, isNew = editNew, onSave = { n ->
             val cur = Scenes.desired(c)
             val rest = cur.flatMap { if (it.id != s0.id) listOf(it) else if (d != null && it.days.size > 1) listOf(it.copy(days = it.days - d)) else emptyList() }
             val nn = if (!editNew && s0.days.size > 1) n.copy(id = "c" + System.currentTimeMillis()) else n
@@ -334,7 +335,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
             val cur = Scenes.desired(c)
             save(cur.flatMap { if (it.id != s0.id) listOf(it) else if (d != null && it.days.size > 1) listOf(it.copy(days = it.days - d)) else emptyList() })
             edit = null
-        }, onClose = { edit = null })
+        }, onClose = { edit = null }) }
     }
     if (showTerm) TermSheet(openPicker = termPicker, onChange = { ver++ }, onClose = { showTerm = false; termPicker = false })
     if (showSecs) SecTimesSheet(onChange = { ver++ }, onClose = { showSecs = false })
@@ -509,27 +510,57 @@ private fun nowY(now: Int, starts: List<Int>, ends: List<Int>, rowH: Dp): Dp? {
     return null
 }
 
+/** 课块里能放下几行：课名优先，其次教室，最后老师；放不下整行的就不放，避免半截字。 */
+private class Fit(val name: Int, val room: Int, val teacher: Int)
+
 @Composable
 private fun CourseBlock(k: Block, col: Pair<Color, Color>, m: Modifier, onClick: () -> Unit) {
     val (bg, fg) = col
     val span = k.b - k.a + 1
+    val tm = rememberTextMeasurer()
+    val density = LocalDensity.current
     Box(m.clip(RoundedCornerShape(9.dp)).background(if (k.on) bg else C.Sand.copy(alpha = 0.75f))
         .then(if (k.on) Modifier else Modifier.border(1.dp, C.Track, RoundedCornerShape(9.dp)))
         .clickable { onClick() }) {
         if (k.on) Box(Modifier.fillMaxHeight().width(3.dp).background(fg.copy(alpha = 0.35f)))
         val tc = if (k.on) fg else C.Faint
-        Column(Modifier.fillMaxSize().padding(start = 5.dp, end = 3.dp, top = 5.dp, bottom = 4.dp)) {
-            Text(k.s.name, fontSize = 12.sp, lineHeight = 15.sp, color = tc, fontWeight = FontWeight.SemiBold,
-                maxLines = (span * 2 + 1).coerceIn(2, 7), overflow = TextOverflow.Ellipsis)
-            if (k.s.room.isNotBlank()) Text("@" + k.s.room, fontSize = 11.sp, lineHeight = 13.sp, color = tc.copy(alpha = 0.9f),
-                maxLines = if (span >= 2) 3 else 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
-            if (k.s.teacher.isNotBlank() && span >= 2) Text(k.s.teacher, fontSize = 10.sp, lineHeight = 12.sp, color = tc.copy(alpha = 0.75f),
-                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
-            Spacer(Modifier.weight(1f))
-            if (!k.on) Text(tr("非本周"), fontSize = 9.sp, color = C.Soft, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(C.Card).padding(horizontal = 3.dp, vertical = 1.dp))
-            else if (k.s.level == 2 && span >= 2) Text(Slot.LEVELS[2], fontSize = 9.sp, color = Color.White, maxLines = 1,
-                modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(fg.copy(alpha = 0.75f)).padding(horizontal = 3.dp, vertical = 1.dp))
+        val tag: String? = when {
+            !k.on -> tr("非本周")
+            k.s.level == 2 && span >= 2 -> if (Tr.cjk) Slot.LEVELS[2] else "!"
+            else -> null
+        }
+        val sName = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold)
+        val sRoom = TextStyle(fontSize = 11.sp, lineHeight = 13.sp)
+        val sTeach = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+        BoxWithConstraints(Modifier.fillMaxSize().padding(start = 5.dp, end = 3.dp, top = 5.dp, bottom = 4.dp)) {
+            val wPx = constraints.maxWidth; val hPx = constraints.maxHeight
+            val room = if (k.s.room.isNotBlank()) "@" + k.s.room else ""
+            val fit = remember(k.s.name, room, k.s.teacher, wPx, hPx, tag) {
+                val cons = androidx.compose.ui.unit.Constraints(maxWidth = wPx.coerceAtLeast(1))
+                fun lines(t: String, st: TextStyle) = if (t.isBlank()) 0 else tm.measure(androidx.compose.ui.text.AnnotatedString(t), st, constraints = cons).lineCount
+                fun h(t: String, st: TextStyle, n: Int) = if (n <= 0 || t.isBlank()) 0 else
+                    tm.measure(androidx.compose.ui.text.AnnotatedString(t), st, overflow = TextOverflow.Ellipsis, maxLines = n, constraints = cons).size.height
+                val gap = with(density) { 3.dp.toPx() }
+                val avail = hPx - (if (tag != null) with(density) { 17.dp.toPx() } else 0f)
+                val nL = lines(k.s.name, sName); val rL = minOf(lines(room, sRoom), 3); val tL = minOf(lines(k.s.teacher, sTeach), 2)
+                fun cost(n: Int, r: Int, t: Int) = h(k.s.name, sName, n) + (if (r > 0) gap + h(room, sRoom, r) else 0f) + (if (t > 0) gap + h(k.s.teacher, sTeach, t) else 0f)
+                var n = minOf(nL, 2).coerceAtLeast(1); var r = 0; var t = 0
+                while (n > 1 && cost(n, 0, 0) > avail) n--
+                if (rL > 0 && cost(n, 1, 0) <= avail) r = 1
+                while (n < nL && cost(n + 1, r, 0) <= avail) n++
+                while (r in 1 until rL && cost(n, r + 1, 0) <= avail) r++
+                while (t < tL && cost(n, r, t + 1) <= avail) t++
+                Fit(n, r, t)
+            }
+            Column(Modifier.fillMaxSize()) {
+                Text(k.s.name, style = sName, color = tc, maxLines = fit.name, overflow = TextOverflow.Ellipsis)
+                if (fit.room > 0) Text(room, style = sRoom, color = tc.copy(alpha = 0.9f), maxLines = fit.room, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
+                if (fit.teacher > 0) Text(k.s.teacher, style = sTeach, color = tc.copy(alpha = 0.75f), maxLines = fit.teacher, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
+                Spacer(Modifier.weight(1f))
+                if (tag != null) Text(tag, fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1, softWrap = false,
+                    color = if (k.on) Color.White else C.Soft,
+                    modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(if (k.on) fg.copy(alpha = 0.75f) else C.Card).padding(horizontal = 4.dp, vertical = 2.dp))
+            }
         }
     }
 }
@@ -688,6 +719,7 @@ fun TermSheet(openPicker: Boolean = false, onChange: () -> Unit, onClose: () -> 
     var off by remember { mutableStateOf(Scenes.showOff(c)) }
     var wk by remember { mutableStateOf(Scenes.showWeekend(c)) }
     var pick by remember { mutableStateOf(openPicker) }
+    LaunchedEffect(openPicker) { if (openPicker) pick = true }
     fun reload() { term = Scenes.termStart(c); week = Scenes.weekNow(c); onChange() }
     ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
         Column(Modifier.padding(horizontal = 22.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
