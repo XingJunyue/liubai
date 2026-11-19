@@ -50,6 +50,15 @@ class LogicTest {
         assertEquals(895, r[3].from)
     }
 
+    @Test fun ocrMissingHeaders() {
+        val g = grid().filterNot { it.t == "周一" || it.t == "周四" }.toMutableList()
+        g += l("周-", 200, 40)
+        g += l("高等数学", 200, 104); g += l("程序设计", 560, 464)
+        val r = Ocr.parse(g, 1000, ::sec).associateBy { it.name }
+        assertEquals(setOf(1), r["高等数学"]!!.days)
+        assertEquals(setOf(4), r["程序设计"]!!.days)
+    }
+
     @Test(expected = IllegalStateException::class) fun ocrNoHeader() {
         Ocr.parse(listOf(l("随便一张图", 100, 100)), 500, ::sec)
     }

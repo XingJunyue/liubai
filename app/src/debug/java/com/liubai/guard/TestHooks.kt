@@ -19,6 +19,7 @@ object TestHooks {
             val f = File(c.getExternalFilesDir(null), name)
             Log.i("LiubaiTest", "OCR start ${f.absolutePath} exists=${f.exists()}")
             Ocr.read(c, Uri.fromFile(f)) { r, e ->
+                Ocr.last.forEach { Log.i("LiubaiTest", "OCR LINE ${it.t} @${it.r.left},${it.r.top},${it.r.right},${it.r.bottom}") }
                 if (r == null) Log.i("LiubaiTest", "OCR FAIL $e")
                 else { Log.i("LiubaiTest", "OCR OK ${r.size}"); r.forEach { Log.i("LiubaiTest", "OCR ROW ${it.days.first()}|${it.name}|${it.from}|${it.to}") } }
             }

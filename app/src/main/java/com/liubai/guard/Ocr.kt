@@ -16,6 +16,8 @@ import kotlin.math.roundToInt
 object Ocr {
     /** 一行字和它在图上的位置。 */
     class R(val left: Int, val top: Int, val right: Int, val bottom: Int)
+    /** 最近一次认出的原始文字（调试用）。 */
+    @Volatile var last: List<L> = emptyList()
     class L(val t: String, val r: R) { val cx get() = (r.left + r.right) / 2f; val cy get() = (r.top + r.bottom) / 2f }
 
     private val DAY = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '日' to 7, '天' to 7)
@@ -24,6 +26,8 @@ object Ocr {
     private fun dayOf(t: String): Int? {
         val s = t.trim().replace(" ", "")
         Regex("^(?:周|星期|礼拜)([一二三四五六日天])").find(s)?.let { return DAY[it.groupValues[1][0]] }
+        // 「一」很细，常被认成横杠
+        if (Regex("^(?:周|星期|礼拜)[-—–_~]$").matches(s)) return 1
         if (s.length == 1 && s[0] in DAY) return DAY[s[0]]
         val l = s.lowercase(); EN.forEachIndexed { i, e -> if (l.startsWith(e)) return i + 1 }
         return null
@@ -55,6 +59,7 @@ object Ocr {
                     val parts = if (multi.findAll(l.text).count() >= 2) l.elements.map { it.text to it.boundingBox } else listOf(l.text to l.boundingBox)
                     parts.mapNotNull { (t, bb) -> bb?.let { L(t, R(it.left, it.top, it.right, it.bottom)) } }
                 } }
+                last = lines
                 try { val r = parse(lines, img.height) { a, b -> Scenes.secRange(c, a, b) }; if (r.isEmpty()) done(null, "没认出课程，换一张更清楚、带星期表头的截图试试") else done(r, null) }
                 catch (x: Exception) { Diag.log("课表识别出错 ${x.message}"); done(null, "没认出来：${x.message ?: "格式不太一样"}") }
             }
@@ -66,7 +71,13 @@ object Ocr {
         // 表头：每个星期几只留最上面那个
         val heads = all.mapNotNull { l -> dayOf(l.t)?.let { it to l } }.groupBy { it.first }.mapValues { e -> e.value.minBy { it.second.r.top }.second }
         if (heads.size < 3) throw IllegalStateException("没找到「周一、周二…」那一行")
-        val hx = heads.mapValues { it.value.cx }
+        // 有的表头字没认出来：按已认出的几列等距补齐
+        val found = heads.mapValues { it.value.cx }
+        val n = found.size.toFloat()
+        val md = found.keys.sum() / n; val mx = found.values.sum() / n
+        val slope = found.entries.sumOf { ((it.key - md) * (it.value - mx)).toDouble() } / found.keys.sumOf { ((it - md) * (it - md)).toDouble() }
+        val lastDay = if ((found.keys.maxOrNull() ?: 5) >= 6) 7 else 5
+        val hx = (1..lastDay).associateWith { d -> found[d] ?: (mx + slope * (d - md)).toFloat() }
         val sortedX = hx.values.sorted()
         val colW = (sortedX.last() - sortedX.first()) / (sortedX.size - 1).coerceAtLeast(1)
         val headBottom = heads.values.maxOf { it.r.bottom }

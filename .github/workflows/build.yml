@@ -53,9 +53,14 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: bash tools/smoke.sh
-      - uses: actions/upload-artifact@v4
+      - name: Upload screenshots
         if: always()
-        with: { name: shots, path: shots }
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd shots && zip -q ../shots.zip * && cd ..
+          gh release view ci-shots >/dev/null 2>&1 || gh release create ci-shots --prerelease --title "CI screenshots" --notes "测试截图，不是安装包"
+          gh release upload ci-shots shots.zip --clobber
 
   publish:
     needs: [build, emulator]
