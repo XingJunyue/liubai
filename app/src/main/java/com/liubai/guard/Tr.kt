@@ -97,6 +97,6 @@ fun dayLabel(d: Int): String {
 }
 fun daysText(days: Collection<Int>) = days.sorted().joinToString(if (Tr.cjk) "" else " ") { dayShort(it) }
 
-class App : Application() {
+class LiubaiApp : Application() {
     override fun onCreate() { Tr.init(this); super.onCreate() }
 }

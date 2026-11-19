@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Liubai</string>
+    <string name="service_label">Liubai · Gardien du temps</string>
+    <string name="service_desc">Liubai s\'en sert pour savoir quelle appli vous utilisez, cumuler votre temps du jour et vous ramener doucement à l\'accueil une fois la limite atteinte. Il ne lit ni n\'envoie aucun de vos contenus.</string>
+    <string name="w_ring">Minutes restantes aujourd\'hui</string>
+    <string name="w_icons1">Une rangée d\'icônes, l\'anneau montre l\'usage du jour</string>
+    <string name="w_icons2">Deux rangées d\'icônes, l\'anneau montre l\'usage du jour</string>
+    <string name="w_list">Progression du jour par appli</string>
+    <string name="admin_desc">Verrou de désinstallation : tant que la protection est active, Liubai ne peut pas être désinstallé directement ; touchez 10 fois « OK » dans Liubai pour le lever.</string>
+    <string name="sc_focus">Liubai · Se concentrer</string>
+    <string name="w_ring_name">Liubai · Restant</string>
+    <string name="w_list_name">Liubai · Progression</string>
+    <string name="w_icons1_name">Liubai · Icônes 4×1</string>
+    <string name="w_icons2_name">Liubai · Icônes 4×2</string>
+    <string name="w_pick_name">Contenu du widget</string>
+    <string name="hush_name">Liubai · Notifications masquées</string>
+    <string name="w_today">Liubai · Aujourd\'hui</string>
+    <string name="w_min_left">min dispo</string>
+</resources>

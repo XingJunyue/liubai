@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Liubai</string>
+    <string name="service_label">Liubai · 시간 보호</string>
+    <string name="service_desc">Liubai는 이 서비스로 지금 어떤 앱을 쓰는지 알고, 오늘 사용 시간을 누적하며, 한도를 다 쓰면 살며시 홈으로 돌려보내요. 내용은 읽거나 업로드하지 않아요.</string>
+    <string name="w_ring">오늘 남은 시간(분)</string>
+    <string name="w_icons1">아이콘 한 줄, 바깥 고리는 오늘 사용량</string>
+    <string name="w_icons2">아이콘 두 줄, 바깥 고리는 오늘 사용량</string>
+    <string name="w_list">앱별 오늘 진행 상황</string>
+    <string name="admin_desc">삭제 잠금: 보호 중엔 Liubai를 바로 삭제할 수 없어요. 삭제하려면 Liubai에서 ‘확인’을 10번 연속 눌러 풀어요.</string>
+    <string name="sc_focus">Liubai · 잠깐 집중</string>
+    <string name="w_ring_name">Liubai · 남은 시간</string>
+    <string name="w_list_name">Liubai · 진행</string>
+    <string name="w_icons1_name">Liubai · 아이콘 4×1</string>
+    <string name="w_icons2_name">Liubai · 아이콘 4×2</string>
+    <string name="w_pick_name">위젯 표시</string>
+    <string name="hush_name">Liubai · 알림 숨기기</string>
+    <string name="w_today">Liubai · 오늘</string>
+    <string name="w_min_left">분 사용 가능</string>
+</resources>

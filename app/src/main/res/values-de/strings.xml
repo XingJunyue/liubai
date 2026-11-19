@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Liubai</string>
+    <string name="service_label">Liubai · Zeitschutz</string>
+    <string name="service_desc">Liubai erkennt damit, welche App du gerade nutzt, zählt die heutige Nutzungszeit und bringt dich sanft zum Startbildschirm zurück, wenn das Limit erreicht ist. Es liest oder lädt keine deiner Inhalte hoch.</string>
+    <string name="w_ring">Verbleibende Minuten heute</string>
+    <string name="w_icons1">Eine Reihe Symbole, Ring zeigt heutige Nutzung</string>
+    <string name="w_icons2">Zwei Reihen Symbole, Ring zeigt heutige Nutzung</string>
+    <string name="w_list">Heutiger Fortschritt pro App</string>
+    <string name="admin_desc">Deinstallationssperre: Solange der Schutz aktiv ist, lässt sich Liubai nicht direkt deinstallieren. Zum Lösen in Liubai 10-mal auf „OK“ tippen.</string>
+    <string name="sc_focus">Liubai · Fokus</string>
+    <string name="w_ring_name">Liubai · Rest</string>
+    <string name="w_list_name">Liubai · Fortschritt</string>
+    <string name="w_icons1_name">Liubai · Symbole 4×1</string>
+    <string name="w_icons2_name">Liubai · Symbole 4×2</string>
+    <string name="w_pick_name">Widget-Inhalt</string>
+    <string name="hush_name">Liubai · Mitteilungen stumm</string>
+    <string name="w_today">Liubai · Heute</string>
+    <string name="w_min_left">Min. verfügbar</string>
+</resources>

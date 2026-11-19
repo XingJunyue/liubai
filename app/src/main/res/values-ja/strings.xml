@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">留白</string>
+    <string name="service_label">留白 · 時間の見守り</string>
+    <string name="service_desc">留白はこのサービスを使って、いまどのアプリを使っているかを知り、今日の利用時間を集計し、上限に達したらそっとホーム画面に戻します。あなたの内容を読み取ったり送信したりすることはありません。</string>
+    <string name="w_ring">今日の残り時間（分）</string>
+    <string name="w_icons1">アイコン 1 列。外側の輪が今日の利用量</string>
+    <string name="w_icons2">アイコン 2 列。外側の輪が今日の利用量</string>
+    <string name="w_list">各アプリの今日の進捗</string>
+    <string name="admin_desc">アンインストールロック：見守りが有効な間は留白をそのままアンインストールできません。アンインストールしたいときは、留白で「OK」を 10 回連続でタップすると解除されます。</string>
+    <string name="sc_focus">留白 · ちょっと集中</string>
+    <string name="w_ring_name">留白 · 残り</string>
+    <string name="w_list_name">留白 · 進捗</string>
+    <string name="w_icons1_name">留白 · アイコン 4×1</string>
+    <string name="w_icons2_name">留白 · アイコン 4×2</string>
+    <string name="w_pick_name">ウィジェットの表示</string>
+    <string name="hush_name">留白 · 通知をしまう</string>
+    <string name="w_today">留白 · 今日</string>
+    <string name="w_min_left">分 利用可能</string>
+</resources>

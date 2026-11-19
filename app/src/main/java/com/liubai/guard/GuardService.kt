@@ -45,6 +45,11 @@ class GuardService : AccessibilityService() {
             "제거", "강제 중지", "데이터 삭제", "저장공간 지우기", "사용 안함", "비활성화")
         // 删除、移除这类字太常见，只在确认是留白的页面里才算
         private val REMOVE = listOf("删除", "移除", "Delete", "Remove", "Supprimer", "Löschen", "Entfernen", "Eliminar", "Quitar", "削除", "삭제")
+        private val FRIENDLY = listOf("自启动", "自动启动", "关联启动", "后台", "省电", "电池", "耗电", "通知", "悬浮", "锁屏显示", "弹出界面", "权限",
+            "autostart", "auto-start", "auto start", "battery", "background", "notification", "pop-up", "permission",
+            "démarrage auto", "batterie", "arrière-plan", "autostart", "akku", "hintergrund", "benachrichtigung",
+            "inicio automático", "batería", "segundo plano", "notificaci", "自動起動", "バッテリー", "バックグラウンド", "通知",
+            "자동 실행", "배터리", "백그라운드", "알림")
         private val A11Y = listOf("无障碍", "Accessibility", "Accessibilité", "Bedienungshilfen", "Accesibilidad", "ユーザー補助", "접근성")
         private val CANCEL = listOf("取消", "Cancel", "Annuler", "Abbrechen", "Cancelar", "キャンセル", "취소")
         // 桌面长按菜单里一定会有的系统项：和留白的快捷方式同时出现才算长按了留白
@@ -488,8 +493,10 @@ class GuardService : AccessibilityService() {
 
     /** 在留白的应用信息页、无障碍页里点了危险按钮或开关：退回去。 */
     private fun guardClick(e: AccessibilityEvent) {
-        val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.let { "${it.text ?: ""} ${it.contentDescription ?: ""} ${it.viewIdResourceName ?: ""}" } ?: "" } catch (x: Exception) { "" }))
+        val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.let { "${it.text ?: ""} ${it.contentDescription ?: ""}" } ?: "" } catch (x: Exception) { "" }))
         val low = said.lowercase()
+        // 开自启动、电池不限制、后台运行、通知这些是帮留白活得更稳的设置，从来不挡
+        if (FRIENDLY.any { it.lowercase() in low }) return
         val danger = DANGER.any { it.lowercase() in low } || REMOVE.any { it.lowercase() in low }
         // 桌面：刚长按过留白，再点卸载 / 垃圾桶
         if ((e.packageName?.toString() == homePkg || "launcher" in (e.packageName?.toString() ?: "")) && longSelf && SystemClock.elapsedRealtime() - longAt < 15_000 && danger) { bounce(); return }
@@ -607,6 +614,8 @@ class GuardService : AccessibilityService() {
             if (adminAdd(root)) continue
             val danger = DANGER.any { hasText(root, it) } || REMOVE.any { hasText(root, it) }
             if (!danger) continue
+            // 应用信息页本身就写着「卸载」「结束运行」：只看不挡。真要卸载、停止、清数据，系统会弹带「取消」的确认框，那时再挡
+            if (!CANCEL.any { hasText(root, it) }) continue
             // 任何别的应用里（安全中心、设置、应用商店、安装器……）同时出现「留白」和卸载 / 停用 / 清除等字样：一律挡
             Diag.log("挡住 $pk：${dump(root).take(160)}")
             bounce()

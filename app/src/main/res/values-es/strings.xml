@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Liubai</string>
+    <string name="service_label">Liubai · Guardián del tiempo</string>
+    <string name="service_desc">Liubai lo usa para saber qué app estás usando, sumar tu tiempo de uso de hoy y llevarte suavemente al inicio cuando se acabe tu límite. No lee ni sube nada de tu contenido.</string>
+    <string name="w_ring">Minutos que quedan hoy</string>
+    <string name="w_icons1">Una fila de iconos; el anillo muestra el uso de hoy</string>
+    <string name="w_icons2">Dos filas de iconos; el anillo muestra el uso de hoy</string>
+    <string name="w_list">Progreso de cada app hoy</string>
+    <string name="admin_desc">Bloqueo de desinstalación: mientras la protección esté activa, Liubai no se puede desinstalar directamente. Para quitarlo, toca «Aceptar» 10 veces seguidas en Liubai.</string>
+    <string name="sc_focus">Liubai · Enfocarme</string>
+    <string name="w_ring_name">Liubai · Restante</string>
+    <string name="w_list_name">Liubai · Progreso</string>
+    <string name="w_icons1_name">Liubai · Iconos 4×1</string>
+    <string name="w_icons2_name">Liubai · Iconos 4×2</string>
+    <string name="w_pick_name">Apps del widget</string>
+    <string name="hush_name">Liubai · Notificaciones ocultas</string>
+    <string name="w_today">Liubai · Hoy</string>
+    <string name="w_min_left">min disponibles</string>
+</resources>

@@ -1,19 +1,19 @@
 <resources>
-    <string name="app_name">留白</string>
-    <string name="service_label">留白 · 时间守护</string>
-    <string name="service_desc">留白用它来知道你正在用哪个应用、累计今天的使用时长，并在额度用完时把你轻轻送回桌面。它不会读取或上传你的任何内容。</string>
-    <string name="w_ring">今天还剩多少分钟</string>
-    <string name="w_icons1">一排图标，外圈是今天的用量</string>
-    <string name="w_icons2">两排图标，外圈是今天的用量</string>
-    <string name="w_list">每个应用今天的进度</string>
-    <string name="admin_desc">卸载锁：守护生效期间不能直接卸载留白，想卸载时在留白里连点 10 次「确定」即可解开。</string>
-    <string name="sc_focus">留白 · 专注一下</string>
-    <string name="w_ring_name">留白 · 剩余</string>
-    <string name="w_list_name">留白 · 进度</string>
-    <string name="w_icons1_name">留白 · 图标 4×1</string>
-    <string name="w_icons2_name">留白 · 图标 4×2</string>
-    <string name="w_pick_name">小部件显示</string>
-    <string name="hush_name">留白 · 收起通知</string>
-    <string name="w_today">留白 · 今天</string>
-    <string name="w_min_left">分钟可用</string>
+    <string name="app_name">Liubai</string>
+    <string name="service_label">Liubai · Time guard</string>
+    <string name="service_desc">Liubai uses this to know which app you’re using, add up today’s usage time, and gently send you back to the home screen when your allowance is used up. It never reads or uploads any of your content.</string>
+    <string name="w_ring">Minutes left today</string>
+    <string name="w_icons1">One row of icons, ring shows today’s usage</string>
+    <string name="w_icons2">Two rows of icons, ring shows today’s usage</string>
+    <string name="w_list">Each app’s progress today</string>
+    <string name="admin_desc">Uninstall lock: while guarding is on, Liubai can’t be uninstalled directly. To uninstall, tap “OK” 10 times in Liubai to unlock.</string>
+    <string name="sc_focus">Liubai · Focus</string>
+    <string name="w_ring_name">Liubai · Left</string>
+    <string name="w_list_name">Liubai · Progress</string>
+    <string name="w_icons1_name">Liubai · Icons 4×1</string>
+    <string name="w_icons2_name">Liubai · Icons 4×2</string>
+    <string name="w_pick_name">Widget shows</string>
+    <string name="hush_name">Liubai · Hide notifications</string>
+    <string name="w_today">Liubai · Today</string>
+    <string name="w_min_left">min left</string>
 </resources>
