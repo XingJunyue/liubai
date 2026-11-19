@@ -19,12 +19,12 @@ for s in focus time:0 time:1 time:2 weekly groups widget look settings about gui
 done
 
 # 停一下页（带「问一句」）、拦截页（每日用完 / 上课 / 打开次数）
-adb shell am start --activity-clear-task --activity-new-task -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ez ask true; shot 03-pause-ask
+adb shell am start -f 0x10008000 -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ez ask true; shot 03-pause-ask
 adb shell input keyevent KEYCODE_BACK
-adb shell am start --activity-clear-task --activity-new-task -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ei again 10; shot 03-pause-again
+adb shell am start -f 0x10008000 -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ei again 10; shot 03-pause-again
 adb shell input keyevent KEYCODE_BACK
 for w in daily class opens; do
-  adb shell am start --activity-clear-task --activity-new-task -n $P/.BlockActivity --es pkg com.android.chrome --es why $w; shot "04-block-$w"
+  adb shell am start -f 0x10008000 -n $P/.BlockActivity --es pkg com.android.chrome --es why $w; shot "04-block-$w"
   adb shell input keyevent KEYCODE_HOME
 done
 
