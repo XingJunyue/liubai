@@ -193,8 +193,8 @@ object JwOutcome {
     fun failStep(ok: Boolean, err: String, diag: JSONObject?, parsed: Int): String? {
         val login = diag?.optBoolean("login") == true || diag?.optBoolean("loginPage") == true
         if (!ok) return when {
-            err.contains("jwapp") -> "nojwapp"
             err.startsWith("timeout") -> "timeout"
+            err == "jwapp" -> "nojwapp"
             err == "term" || err.contains("JSON") || err.contains("Unexpected token") || err.contains("HTTP 401") || login -> "login"
             err.contains("HTTP") || err.contains("Failed to fetch") || err.contains("NetworkError") || err.contains("Load failed") -> "network"
             else -> "error"
