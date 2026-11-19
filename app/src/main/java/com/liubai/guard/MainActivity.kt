@@ -49,7 +49,8 @@ fun serviceOn(c: Context): Boolean {
 object Nav {
     val open = androidx.compose.runtime.mutableStateOf<String?>(null)
     /** 页面里的第几个分页（「时段」的上课 / 睡前 / 场景），open 写成 "time:1" 这样。 */
-    var sub = 0
+    val subState = androidx.compose.runtime.mutableStateOf(0)
+    var sub: Int get() = subState.value; set(v) { subState.value = v }
 }
 
 class MainActivity : ComponentActivity() {

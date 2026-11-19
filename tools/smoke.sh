@@ -15,15 +15,16 @@ adb shell am start -n $P/.MainActivity --ez seed true; shot 01-home 6
 for s in focus time:0 time:1 time:2 weekly groups widget look settings about guide; do
   adb shell am start -n $P/.MainActivity --es open "$s"
   shot "02-${s/:/-}" 4
+  case "$s" in focus|time:*|weekly|settings) adb shell input swipe 540 1900 540 500 400; shot "02-${s/:/-}-b" 2;; esac
 done
 
 # 停一下页（带「问一句」）、拦截页（每日用完 / 上课 / 打开次数）
-adb shell am start -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ez ask true; shot 03-pause-ask
+adb shell am start --activity-clear-task --activity-new-task -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ez ask true; shot 03-pause-ask
 adb shell input keyevent KEYCODE_BACK
-adb shell am start -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ei again 10; shot 03-pause-again
+adb shell am start --activity-clear-task --activity-new-task -n $P/.PauseActivity --es pkg com.android.chrome --ei sec 5 --ei again 10; shot 03-pause-again
 adb shell input keyevent KEYCODE_BACK
 for w in daily class opens; do
-  adb shell am start -n $P/.BlockActivity --es pkg com.android.chrome --es why $w; shot "04-block-$w"
+  adb shell am start --activity-clear-task --activity-new-task -n $P/.BlockActivity --es pkg com.android.chrome --es why $w; shot "04-block-$w"
   adb shell input keyevent KEYCODE_HOME
 done
 

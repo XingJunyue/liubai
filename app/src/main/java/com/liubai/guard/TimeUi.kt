@@ -38,6 +38,7 @@ private fun levelColor(l: Int) = when (l) { 2 -> C.Clay; 1 -> C.Sage; else -> C.
 @Composable
 fun TimeScreen() {
     var tab by remember { mutableStateOf(Nav.sub.coerceIn(0, 2)) }
+    LaunchedEffect(Nav.subState.value) { tab = Nav.sub.coerceIn(0, 2) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
         Text("时段", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
@@ -95,7 +96,7 @@ private fun CourseTab() {
 
     NowBanner()
     SoftCard(Modifier.fillMaxWidth()) {
-        Toggle("按课表自动上课模式", if (Scenes.enabledToday(c) && !on) "已关闭，明天 0:00 起停用" else "放假时关掉；关闭明天生效，打开马上生效", on) { on = it; Scenes.setEnabled(c, it) }
+        Toggle("按课表自动上课模式", if (Scenes.enabledToday(c) && !on) "已关闭，明天 0:00 起停用" else "放假时关掉，次日生效", on) { on = it; Scenes.setEnabled(c, it) }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (i in 0..2) Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(levelColor(i)))

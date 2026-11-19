@@ -104,7 +104,7 @@ class BlockActivity : ComponentActivity() {
                             packageManager.getLaunchIntentForPackage(Virt.real(pkg))?.let { try { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) {} }
                         }
                         if (canSos) Text(
-                            when { sos > 0 -> "$sos 秒后放行 5 分钟…"; left > 0 -> "真有急事？紧急用 5 分钟（本周还剩 $left 次）"; else -> "本周的紧急次数用完了" },
+                            when { sos > 0 -> "$sos 秒后放行 5 分钟…"; left > 0 -> "有急事？紧急用 5 分钟 · 本周剩 $left 次"; else -> "本周的紧急次数用完了" },
                             fontSize = 13.sp, color = C.Faint, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(bottom = 10.dp).clip(RoundedCornerShape(12.dp))
                                 .clickable(enabled = left > 0 && sos < 0) { sos = 20 }.padding(horizontal = 14.dp, vertical = 8.dp)
