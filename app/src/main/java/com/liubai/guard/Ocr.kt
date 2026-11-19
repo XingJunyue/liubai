@@ -192,7 +192,7 @@ object Ocr {
         val pieces = all.flatMap { l -> if (l.w > colW * 1.15f && l.parts.size >= 2) l.parts else listOf(l) }
         val timeLike = Regex("^[\\d\\s/.\\-~–—:：月日周週주()（）]+$")
         val body = pieces.filter { it.r.top > headBottom - 2 && it.cx > leftEdge && dayOf(it.t) == null && secOf(it.t) == null && it.t.isNotBlank() &&
-            !timeLike.matches(it.t.trim()) }
+            (!timeLike.matches(it.t.trim()) || WEEKS.containsMatchIn(it.t)) }
         val byDay = HashMap<Int, MutableList<L>>()
         for (l in body) {
             val (d, x) = hx.minBy { abs(it.value - l.cx) }
