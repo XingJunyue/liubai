@@ -504,8 +504,22 @@ private fun FocusSettings(idle: Boolean, strict: Boolean, onWhitelist: () -> Uni
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 15.sp, color = C.Ink, modifier = Modifier.weight(1f))
             Text("−", fontSize = 20.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { if (value > 1) onChange(value - 1) }.padding(horizontal = 12.dp, vertical = 2.dp))
-            Text(tr("{0} 分钟", value), fontSize = 15.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 64.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            // 点数字直接输入任意分钟数（至少 1）
+            var text by remember(value) { mutableStateOf(value.toString()) }
+            androidx.compose.foundation.text.BasicTextField(
+                value = text,
+                onValueChange = { t ->
+                    val d = t.filter { it.isDigit() }.take(4)
+                    text = d
+                    d.toIntOrNull()?.let { if (it >= 1) onChange(it) }
+                },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Clay,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                modifier = Modifier.width(56.dp).clip(RoundedCornerShape(10.dp)).background(C.ClayPale).padding(vertical = 4.dp)
+            )
+            Text(tr("分钟"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(start = 4.dp))
             Text("+", fontSize = 20.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { onChange(value + 1) }.padding(horizontal = 12.dp, vertical = 2.dp))
         }
     }
