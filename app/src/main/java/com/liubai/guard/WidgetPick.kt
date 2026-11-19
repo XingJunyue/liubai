@@ -34,13 +34,13 @@ fun WidgetScreen(onDone: (() -> Unit)? = null) {
     val sel = remember { mutableStateListOf<String>().apply { addAll(WidgetSel.get(c).filter { p -> apps.any { it.pkg == p } }) } }
     fun save() { WidgetSel.set(c, sel.toList()); Widgets.updateAll(c, force = true) }
     Column(Modifier.fillMaxSize()) {
-        Text("小部件显示", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("小部件显示"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "勾选的顺序就是桌面上的顺序：图标 4×1 放前 4 个，4×2 放前 8 个，进度列表放前 3 个，剩余圆环只算勾选的。一个都不选就自动显示全部。",
+            tr("勾选的顺序就是桌面上的顺序：图标 4×1 放前 4 个，4×2 放前 8 个，进度列表放前 3 个，剩余圆环只算勾选的。一个都不选就自动显示全部。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         if (apps.isEmpty()) {
-            Text("还没有在守护的应用，先在「今天」里添加吧。", fontSize = 14.sp, color = C.Faint, modifier = Modifier.padding(top = 24.dp))
+            Text(tr("还没有在守护的应用，先在「今天」里添加吧。"), fontSize = 14.sp, color = C.Faint, modifier = Modifier.padding(top = 24.dp))
         }
         LazyColumn(Modifier.weight(1f).padding(top = 10.dp)) {
             items(apps, key = { it.pkg }) { a ->
@@ -63,11 +63,11 @@ fun WidgetScreen(onDone: (() -> Unit)? = null) {
             }
         }
         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (sel.isEmpty()) "现在：自动显示全部" else "已选 ${sel.size} 个", fontSize = 13.sp, color = C.Faint, modifier = Modifier.weight(1f))
-            if (sel.isNotEmpty()) Text("清空", fontSize = 14.sp, color = C.ClayDeep,
+            Text(if (sel.isEmpty()) tr("现在：自动显示全部") else tr("已选 {0} 个", sel.size), fontSize = 13.sp, color = C.Faint, modifier = Modifier.weight(1f))
+            if (sel.isNotEmpty()) Text(tr("清空"), fontSize = 14.sp, color = C.ClayDeep,
                 modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { sel.clear(); save() }.padding(horizontal = 10.dp, vertical = 6.dp))
         }
-        if (onDone != null) PrimaryButton("好了", Modifier.padding(bottom = 16.dp)) { save(); onDone() }
+        if (onDone != null) PrimaryButton(tr("好了"), Modifier.padding(bottom = 16.dp)) { save(); onDone() }
     }
 }
 

@@ -28,14 +28,14 @@ object Stats {
         }
         val mins = ((m.timeInMillis - now.timeInMillis) / 60_000L).toInt() + 1
         val h = mins / 60; val mm = mins % 60
-        return if (h > 0) "$h 小时 $mm 分" else "$mm 分钟"
+        return if (h > 0) tr("{0} 小时 {1} 分", h, mm) else tr("{0} 分钟", mm)
     }
 
     fun greeting(): String = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-        in 5..10 -> "早上好呀"
-        in 11..13 -> "中午好呀"
-        in 14..17 -> "下午好呀"
-        in 18..22 -> "晚上好呀"
-        else -> "夜深了"
+        in 5..10 -> tr("早上好呀")
+        in 11..13 -> tr("中午好呀")
+        in 14..17 -> tr("下午好呀")
+        in 18..22 -> tr("晚上好呀")
+        else -> tr("夜深了")
     }
 }

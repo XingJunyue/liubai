@@ -25,8 +25,8 @@ data class Slot(
             return Slot(j.optString("id"), j.optString("n"), (0 until d.length()).map { d.getInt(it) }.toSet(),
                 j.optInt("f"), j.optInt("t"), j.optInt("l", 1), j.optString("s", ""), j.optString("k", "course"))
         }
-        val LEVELS = listOf("水课", "普通", "重要")
-        val LEVEL_NOTE = listOf("打开守护中的应用前先停一下", "守护中的应用不开放", "只开放白名单里的应用")
+        val LEVELS = listOf(tr("水课"), tr("普通"), tr("重要"))
+        val LEVEL_NOTE = listOf(tr("打开守护中的应用前先停一下"), tr("守护中的应用不开放"), tr("只开放白名单里的应用"))
     }
 }
 
@@ -155,7 +155,7 @@ object Scenes {
         val l = ArrayList<Pair<Long, String>>()
         c.contentResolver.query(android.provider.CalendarContract.Calendars.CONTENT_URI,
             arrayOf(android.provider.CalendarContract.Calendars._ID, android.provider.CalendarContract.Calendars.CALENDAR_DISPLAY_NAME), null, null, null)?.use {
-            while (it.moveToNext()) l += it.getLong(0) to (it.getString(1) ?: "日历")
+            while (it.moveToNext()) l += it.getLong(0) to (it.getString(1) ?: tr("日历"))
         }
         return l
     }

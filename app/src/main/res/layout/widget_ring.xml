@@ -9,6 +9,6 @@
         <TextView android:id="@+id/big" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="—" android:textColor="#3D3530" android:textSize="30sp" android:textStyle="bold"/>
         <TextView android:id="@+id/small" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="分钟可用" android:textColor="#A39589" android:textSize="11sp"/>
+            android:text="@string/w_min_left" android:textColor="#A39589" android:textSize="11sp"/>
     </LinearLayout>
 </FrameLayout>

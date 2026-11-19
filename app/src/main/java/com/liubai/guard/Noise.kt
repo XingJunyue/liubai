@@ -9,10 +9,10 @@ import kotlin.random.Random
 /** 番茄钟白噪音：自然声用真实录音循环播放；纯噪音预先算好一段再循环。 */
 object Noise {
     val KINDS = listOf(
-        "off" to "关", "rain" to "雨声", "storm" to "雷雨", "waves" to "海浪", "stream" to "溪流",
-        "wind" to "风声", "fireplace" to "篝火", "summer_night" to "夏夜", "birds" to "鸟鸣",
-        "coffee_shop" to "咖啡馆", "city" to "城市", "train" to "火车", "boat" to "小船",
-        "white" to "白噪音", "pink" to "粉噪音", "brown" to "棕噪音"
+        "off" to tr("关"), "rain" to tr("雨声"), "storm" to tr("雷雨"), "waves" to tr("海浪"), "stream" to tr("溪流"),
+        "wind" to tr("风声"), "fireplace" to tr("篝火"), "summer_night" to tr("夏夜"), "birds" to tr("鸟鸣"),
+        "coffee_shop" to tr("咖啡馆"), "city" to tr("城市"), "train" to tr("火车"), "boat" to tr("小船"),
+        "white" to tr("白噪音"), "pink" to tr("粉噪音"), "brown" to tr("棕噪音")
     )
     /** 真实录音（来自 Blanket 项目的 CC0 / CC BY / 公有领域素材），其余为实时合成。 */
     private val RAW = mapOf(
@@ -33,7 +33,7 @@ object Noise {
     @Volatile private var playing: String? = null
     /** 选择界面里的试听：不论是否在专注，都先放这个。 */
     @Volatile var preview: String? = null
-    fun label(k: String) = KINDS.firstOrNull { it.first == k }?.second ?: "关"
+    fun label(k: String) = KINDS.firstOrNull { it.first == k }?.second ?: tr("关")
     @Volatile private var vol = 0.6f
     private var thread: Thread? = null
 

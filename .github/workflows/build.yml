@@ -44,7 +44,7 @@ jobs:
       - name: Timetable image for OCR
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq fonts-noto-cjk python3-pil > /dev/null
-          python3 tools/make_timetable.py out/timetable.png
+          for v in zh zh_dense en de ja ko; do python3 tools/make_timetable.py out/tt-$v.png $v; done
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -65,6 +65,7 @@ jobs:
 
   publish:
     needs: [build, emulator]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

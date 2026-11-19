@@ -145,7 +145,7 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
         onClick, modifier.fillMaxWidth().height(Look.btnHeight().dp), enabled = enabled,
         shape = RoundedCornerShape(Look.btnRadius().dp),
         colors = ButtonDefaults.buttonColors(containerColor = Look.btnBg(), contentColor = Look.btnFg(), disabledContainerColor = C.Track)
-    ) { Text(Look.label("pb_$text", text), fontSize = Look.btnFont().sp, fontWeight = FontWeight.SemiBold) }
+    ) { Text(Look.label("pb_${Tr.source(text)}", text), fontSize = Look.btnFont().sp, fontWeight = FontWeight.SemiBold) }
 }
 
 /**

@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <application
+        android:name=".App"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -60,19 +61,19 @@
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/guard_config" />
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="screen time guard" />
         </service>
-        <receiver android:name=".RingWidget" android:exported="false" android:label="留白 · 剩余">
+        <receiver android:name=".RingWidget" android:exported="false" android:label="@string/w_ring_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_ring" />
         </receiver>
-        <receiver android:name=".ListWidget" android:exported="false" android:label="留白 · 进度">
+        <receiver android:name=".ListWidget" android:exported="false" android:label="@string/w_list_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_list" />
         </receiver>
-        <receiver android:name=".IconsWidget1" android:exported="false" android:label="留白 · 图标 4×1">
+        <receiver android:name=".IconsWidget1" android:exported="false" android:label="@string/w_icons1_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_icons1" />
         </receiver>
-        <receiver android:name=".IconsWidget2" android:exported="false" android:label="留白 · 图标 4×2">
+        <receiver android:name=".IconsWidget2" android:exported="false" android:label="@string/w_icons2_name">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_icons2" />
         </receiver>
@@ -83,12 +84,12 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
-        <activity android:name=".WidgetPickActivity" android:exported="true" android:label="小部件显示"
+        <activity android:name=".WidgetPickActivity" android:exported="true" android:label="@string/w_pick_name"
             android:theme="@style/Theme.Liubai" android:excludeFromRecents="true">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" /></intent-filter>
         </activity>
         <receiver android:name=".PairReceiver" android:exported="false" />
-        <service android:name=".HushService" android:exported="true" android:label="留白 · 收起通知"
+        <service android:name=".HushService" android:exported="true" android:label="@string/hush_name"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
         </service>

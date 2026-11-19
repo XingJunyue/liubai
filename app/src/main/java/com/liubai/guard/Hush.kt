@@ -46,10 +46,10 @@ object Hush {
         pr.edit().putInt("n", 0).putString("apps", "").apply()
         try {
             val nm = c.getSystemService(NotificationManager::class.java) ?: return
-            nm.createNotificationChannel(NotificationChannel("hush", "收起的通知", NotificationManager.IMPORTANCE_DEFAULT))
+            nm.createNotificationChannel(NotificationChannel("hush", tr("收起的通知"), NotificationManager.IMPORTANCE_DEFAULT))
             val pi = PendingIntent.getActivity(c, 9, Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
             nm.notify(79, NotificationCompat.Builder(c, "hush").setSmallIcon(R.drawable.ic_mono)
-                .setContentTitle("刚才收起了 $n 条通知").setContentText("来自 $names，现在都放回来了").setAutoCancel(true).setContentIntent(pi).build())
+                .setContentTitle(tr("刚才收起了 {0} 条通知", n)).setContentText(tr("来自 {0}，现在都放回来了", names)).setAutoCancel(true).setContentIntent(pi).build())
         } catch (x: Exception) {}
     }
 
@@ -97,7 +97,7 @@ fun HushToggle(label: String, sub: String, get: (Context) -> Boolean, set: (Cont
     val c = androidx.compose.ui.platform.LocalContext.current
     var v by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(get(c) && Hush.granted(c)) }
     Every(1500) { if (get(c) && Hush.granted(c) != v) v = get(c) && Hush.granted(c) }
-    Toggle(label, if (!Hush.granted(c)) "$sub（需要先允许读取通知）" else sub, v) { want ->
+    Toggle(label, if (!Hush.granted(c)) tr("{0}（需要先允许读取通知）", sub) else sub, v) { want ->
         set(c, want); v = want && Hush.granted(c)
         if (want && !Hush.granted(c)) try { c.startActivity(Hush.settingsIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (x: Exception) {}
     }

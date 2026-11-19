@@ -14,6 +14,7 @@ import java.io.File
 object TestHooks {
     fun run(c: Context, i: Intent?) {
         i ?: return
+        i.getStringExtra("setlang")?.let { Log.i("LiubaiTest", "lang -> $it"); Tr.set(c, it); return }
         if (i.getBooleanExtra("seed", false)) seed(c)
         i.getStringExtra("ocr")?.let { name ->
             val f = File(c.getExternalFilesDir(null), name)

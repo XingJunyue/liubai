@@ -29,7 +29,7 @@ private class Week(
 private fun load(c: android.content.Context): Week {
     val pkgs = Store.desired(c).keys + Store.active(c).keys
     val limit = Store.desired(c).values.sum()
-    val fmt = SimpleDateFormat("E", Locale.CHINA)
+    val fmt = SimpleDateFormat("E", Tr.locale())
     val days = ArrayList<Pair<String, Int>>()
     val per = HashMap<String, Long>()
     var ok = 0
@@ -40,7 +40,7 @@ private fun load(c: android.content.Context): Week {
         for (p in pkgs) { val v = m[p] ?: 0L; sum += v; per[p] = (per[p] ?: 0L) + v }
         val min = (sum / 60_000L).toInt()
         if (limit > 0 && min <= limit) ok++
-        days += (if (i == 0) "今天" else fmt.format(Date(s)).replace("周", "")) to min
+        days += (if (i == 0) tr("今天") else fmt.format(Date(s)).replace("周", "").replace("曜日", "")) to min
     }
     val prevMap = Usage.range(c, Usage.dayStart(13), Usage.dayStart(6))
     val prev = (pkgs.sumOf { prevMap[it] ?: 0L } / 60_000L).toInt()
@@ -48,7 +48,7 @@ private fun load(c: android.content.Context): Week {
         days.sumOf { it.second }, prev, ok, limit)
 }
 
-private fun hm(m: Int) = if (m >= 60) "${m / 60} 小时 ${m % 60} 分" else "$m 分钟"
+private fun hm(m: Int) = if (m >= 60) tr("{0} 小时 {1} 分", m / 60, m % 60) else tr("{0} 分钟", m)
 
 @Composable
 fun WeeklyScreen() {
@@ -61,17 +61,17 @@ fun WeeklyScreen() {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
-        Text("数据", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-        Text("看得见的进步", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+        Text(tr("数据"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("看得见的进步"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(18.dp))
         InsightsTop()
-        Text("最近 7 天", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 8.dp, bottom = 10.dp))
+        Text(tr("最近 7 天"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 8.dp, bottom = 10.dp))
         val x = w
         when {
             !Usage.granted(c) -> UsageGuide()
-            failed -> Text("这周的记录暂时读不到，稍后再来看看。", color = C.Soft, fontSize = 14.sp)
-            x == null -> Text("正在整理这一周…", color = C.Faint, fontSize = 14.sp)
-            x.perApp.isEmpty() -> Text("还没有守护的应用，先在「今天」里添加吧。", color = C.Soft, fontSize = 14.sp)
+            failed -> Text(tr("这周的记录暂时读不到，稍后再来看看。"), color = C.Soft, fontSize = 14.sp)
+            x == null -> Text(tr("正在整理这一周…"), color = C.Faint, fontSize = 14.sp)
+            x.perApp.isEmpty() -> Text(tr("还没有守护的应用，先在「今天」里添加吧。"), color = C.Soft, fontSize = 14.sp)
             else -> WeekBody(x)
         }
     }
@@ -83,14 +83,14 @@ private fun WeekBody(x: Week) {
     Column(Modifier.fillMaxWidth()) {
 
         SoftCard(Modifier.fillMaxWidth()) {
-            Text("这周一共用了", fontSize = 13.sp, color = C.Soft)
+            Text(tr("这周一共用了"), fontSize = 13.sp, color = C.Soft)
             Text(hm(x.total), fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 2.dp))
             val diff = x.prev - x.total
             val line = when {
-                x.prev == 0 -> "这是你和留白的第一周，慢慢来"
-                diff > 0 -> "比上周少了 ${hm(diff)}，给自己留出了一大段空白"
-                diff < 0 -> "比上周多了 ${hm(-diff)}，下周我们再慢一点"
-                else -> "和上周差不多，稳稳的"
+                x.prev == 0 -> tr("这是你和留白的第一周，慢慢来")
+                diff > 0 -> tr("比上周少了 {0}，给自己留出了一大段空白", hm(diff))
+                diff < 0 -> tr("比上周多了 {0}，下周我们再慢一点", hm(-diff))
+                else -> tr("和上周差不多，稳稳的")
             }
             Text(line, fontSize = 13.sp, color = C.SageInk, modifier = Modifier.padding(top = 6.dp), lineHeight = 20.sp)
             Spacer(Modifier.height(18.dp))
@@ -115,18 +115,18 @@ private fun WeekBody(x: Week) {
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SoftCard(Modifier.weight(1f)) {
-                Text("守住的天数", fontSize = 13.sp, color = C.Soft)
+                Text(tr("守住的天数"), fontSize = 13.sp, color = C.Soft)
                 Text("${x.okDays} / 7", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = C.SageInk, modifier = Modifier.padding(top = 2.dp))
             }
             SoftCard(Modifier.weight(1f)) {
-                Text("日均", fontSize = 13.sp, color = C.Soft)
+                Text(tr("日均"), fontSize = 13.sp, color = C.Soft)
                 Text(hm(x.total / 7), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 6.dp))
             }
         }
 
         Spacer(Modifier.height(16.dp))
         SoftCard(Modifier.fillMaxWidth()) {
-            Text("各应用", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+            Text(tr("各应用"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
             val top = maxOf(x.perApp.maxOf { it.second }, 1)
             x.perApp.forEach { (pkg, m) ->
                 val app = remember(pkg) { Apps.info(c, pkg) }

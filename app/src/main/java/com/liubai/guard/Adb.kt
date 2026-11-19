@@ -82,7 +82,7 @@ class LiubaiAdb private constructor(c: Context) : AbsAdbConnectionManager() {
 
     override fun getPrivateKey(): PrivateKey = key
     override fun getCertificate(): Certificate = cert
-    override fun getDeviceName(): String = "留白"
+    override fun getDeviceName(): String = tr("留白")
 
     companion object {
         @Volatile private var one: LiubaiAdb? = null
@@ -116,12 +116,12 @@ object WAdb {
             }.also { it.start() }
             h.postDelayed({ try { mdns?.stop() } catch (x: Exception) {} }, 5 * 60_000L)
         } catch (x: Exception) {}
-        notify(app, "输入配对码", "在「无线调试」里点「使用配对码配对设备」，把 6 位数字填在这里", true)
+        notify(app, tr("输入配对码"), tr("在「无线调试」里点「使用配对码配对设备」，把 6 位数字填在这里"), true)
     }
 
     fun notify(c: Context, title: String, text: String, input: Boolean) {
         val nm = c.getSystemService(NotificationManager::class.java) ?: return
-        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CH, "无线调试配对", NotificationManager.IMPORTANCE_HIGH))
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(NotificationChannel(CH, tr("无线调试配对"), NotificationManager.IMPORTANCE_HIGH))
         val b = NotificationCompat.Builder(c, CH)
             .setSmallIcon(R.drawable.ic_mono)
             .setContentTitle(title).setContentText(text)
@@ -129,10 +129,10 @@ object WAdb {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
         if (input) {
-            val ri = RemoteInput.Builder(KEY).setLabel("6 位配对码").build()
+            val ri = RemoteInput.Builder(KEY).setLabel(tr("6 位配对码")).build()
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
             val pi = PendingIntent.getBroadcast(c, 78, Intent(c, PairReceiver::class.java), flags)
-            b.addAction(NotificationCompat.Action.Builder(0, "输入配对码", pi).addRemoteInput(ri).build())
+            b.addAction(NotificationCompat.Action.Builder(0, tr("输入配对码"), pi).addRemoteInput(ri).build())
             b.setOngoing(true)
         } else b.setAutoCancel(true)
         try { nm.notify(NID, b.build()) } catch (x: SecurityException) {}
@@ -149,8 +149,8 @@ object WAdb {
         return out.toString()
     }
 
-    fun doneText(c: Context) = if (Keep.canHeal(c)) "以后留白被系统关掉，会自己重新打开。无线调试可以关掉了。"
-        else "以后留白被系统关掉，会自己重新打开。让「无线调试」一直开着就行；重启或换了 Wi-Fi 后，记得再打开它。"
+    fun doneText(c: Context) = if (Keep.canHeal(c)) tr("以后留白被系统关掉，会自己重新打开。无线调试可以关掉了。")
+        else tr("以后留白被系统关掉，会自己重新打开。让「无线调试」一直开着就行；重启或换了 Wi-Fi 后，记得再打开它。")
 
     fun adbMode(c: Context) = c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).getBoolean("adbMode", false)
 
@@ -174,7 +174,7 @@ object WAdb {
             app.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("adbMode", true).apply()
             return "ok"
         }
-        throw Exception(o.lineSequence().firstOrNull { it.isNotBlank() }?.take(120) ?: "授权没成功")
+        throw Exception(o.lineSequence().firstOrNull { it.isNotBlank() }?.take(120) ?: tr("授权没成功"))
     }
 
     @Volatile private var lastHeal = 0L
@@ -203,7 +203,7 @@ object WAdb {
                 grant(app, m)
             } catch (x: Throwable) { x.message ?: "nopair" }
             when (if ("pairing" in msg.lowercase() || "not paired" in msg.lowercase()) "nopair" else msg) {
-                "ok" -> { status = "done"; notify(app, "好了", doneText(app), false) }
+                "ok" -> { status = "done"; notify(app, tr("好了"), doneText(app), false) }
                 "nopair" -> { status = ""; android.os.Handler(Looper.getMainLooper()).post { begin(app) } }
                 else -> status = "error:$msg"
             }
@@ -243,7 +243,7 @@ object WAdb {
         if (status == "working") return
         val app = c.applicationContext
         status = "working"
-        notify(app, "正在配对…", "稍等几秒", false)
+        notify(app, tr("正在配对…"), tr("稍等几秒"), false)
         thread {
             val msg = try {
                 val m = LiubaiAdb.get(app)
@@ -253,21 +253,21 @@ object WAdb {
                     val md = AdbMdns(app, AdbMdns.SERVICE_TYPE_TLS_PAIRING) { host, port -> if (port > 0) { pairHost = host; pairPort = port; l.countDown() } }
                     md.start(); l.await(15, TimeUnit.SECONDS); md.stop()
                 }
-                if (pairPort <= 0) throw Exception("找不到配对端口：请保持「使用配对码配对设备」的弹窗开着再输入")
+                if (pairPort <= 0) throw Exception(tr("找不到配对端口：请保持「使用配对码配对设备」的弹窗开着再输入"))
                 val host = pairHost?.hostAddress ?: "127.0.0.1"
-                if (!m.pair(host, pairPort, code.trim())) throw Exception("配对码不对，重新点一次配对再试")
-                if (!m.isConnected && !m.connectTls(app, 15_000)) throw Exception("配对成功，但没连上：确认「无线调试」还开着")
+                if (!m.pair(host, pairPort, code.trim())) throw Exception(tr("配对码不对，重新点一次配对再试"))
+                if (!m.isConnected && !m.connectTls(app, 15_000)) throw Exception(tr("配对成功，但没连上：确认「无线调试」还开着"))
                 grant(app, m)
             } catch (x: Throwable) { x.message ?: x.javaClass.simpleName }
             try { mdns?.stop() } catch (x: Exception) {}
             pairPort = -1
             if (msg == "ok") {
                 status = "done"
-                notify(app, "好了", doneText(app), false)
+                notify(app, tr("好了"), doneText(app), false)
             } else {
-                val say = if ("pairing" in msg.lowercase()) "还没配对：重新点「使用配对码配对设备」再试一次" else msg
+                val say = if ("pairing" in msg.lowercase()) tr("还没配对：重新点「使用配对码配对设备」再试一次") else msg
                 status = "error:$say"
-                notify(app, "没成功", say, false)
+                notify(app, tr("没成功"), say, false)
             }
         }
     }
@@ -276,7 +276,7 @@ object WAdb {
 class PairReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         val code = RemoteInput.getResultsFromIntent(i)?.getCharSequence(WAdb.KEY)?.toString()?.filter { it.isDigit() } ?: return
-        if (code.length < 6) { WAdb.notify(c, "配对码是 6 位数字", "再输一次", true); return }
+        if (code.length < 6) { WAdb.notify(c, tr("配对码是 6 位数字"), tr("再输一次"), true); return }
         WAdb.pairAndGrant(c, code)
     }
 }

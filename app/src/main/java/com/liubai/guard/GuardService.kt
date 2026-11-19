@@ -36,10 +36,20 @@ class GuardService : AccessibilityService() {
         private val HINTS = listOf("settings", "packageinstaller", "securitycenter", "safecenter", "systemmanager", "permission", "launcher", "appdetail")
         fun sensitive(pkg: String) = pkg in SETTINGS || HINTS.any { it in pkg }
         // 只拦真正会关掉守护的按钮；页面本身随便看
-        private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "取消激活", "Uninstall", "Force stop", "Clear data", "Disable", "Deactivate")
-        private val CANCEL = listOf("取消", "Cancel")
+        private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "取消激活",
+            "Uninstall", "Force stop", "Clear data", "Clear storage", "Disable", "Deactivate",
+            "Désinstaller", "Forcer l'arrêt", "Effacer les données", "Vider l'espace", "Désactiver",
+            "Deinstallieren", "erzwingen", "Daten löschen", "Speicher leeren", "Deaktivieren",
+            "Desinstalar", "Forzar", "Borrar datos", "Borrar almacenamiento", "Desactivar",
+            "アンインストール", "強制停止", "データを削除", "ストレージを消去", "無効にする", "無効化",
+            "제거", "강제 중지", "데이터 삭제", "저장공간 지우기", "사용 안함", "비활성화")
+        // 删除、移除这类字太常见，只在确认是留白的页面里才算
+        private val REMOVE = listOf("删除", "移除", "Delete", "Remove", "Supprimer", "Löschen", "Entfernen", "Eliminar", "Quitar", "削除", "삭제")
+        private val A11Y = listOf("无障碍", "Accessibility", "Accessibilité", "Bedienungshilfen", "Accesibilidad", "ユーザー補助", "접근성")
+        private val CANCEL = listOf("取消", "Cancel", "Annuler", "Abbrechen", "Cancelar", "キャンセル", "취소")
         // 桌面长按菜单里一定会有的系统项：和留白的快捷方式同时出现才算长按了留白
-        private val MENU = listOf("卸载", "应用信息", "分享", "编辑", "移除", "删除", "App info", "Uninstall")
+        private val MENU = listOf("卸载", "应用信息", "分享", "编辑", "移除", "删除", "App info", "Uninstall", "Infos sur l'appli", "Désinstaller",
+            "App-Info", "Deinstallieren", "Info. de la app", "Información de la aplicación", "Desinstalar", "アプリ情報", "アンインストール", "앱 정보", "제거")
     }
 
     private val h = Handler(Looper.getMainLooper())
@@ -143,11 +153,11 @@ class GuardService : AccessibilityService() {
     private fun pinNotice() {
         try {
             val nm = getSystemService(android.app.NotificationManager::class.java) ?: return
-            nm.createNotificationChannel(android.app.NotificationChannel("keep", "守护常驻", android.app.NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) })
+            nm.createNotificationChannel(android.app.NotificationChannel("keep", tr("守护常驻"), android.app.NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) })
             val pi = android.app.PendingIntent.getActivity(this, 8, Intent(this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), android.app.PendingIntent.FLAG_IMMUTABLE)
             val n = androidx.core.app.NotificationCompat.Builder(this, "keep").setSmallIcon(R.drawable.ic_mono)
-                .setContentTitle("留白守护中").setContentText("锁屏后也会一直在").setOngoing(true)
+                .setContentTitle(tr("留白守护中")).setContentText(tr("锁屏后也会一直在")).setOngoing(true)
                 .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN).setContentIntent(pi).build()
             if (android.os.Build.VERSION.SDK_INT >= 34) startForeground(88, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
             else startForeground(88, n)
@@ -347,7 +357,7 @@ class GuardService : AccessibilityService() {
             val left = lim * 60_000L - used(p)
             if (left in 1..5 * 60_000L) {
                 Store.setWarned(this, p)
-                Toast.makeText(this, "${Apps.info(this, p).label} 今天还剩 ${(left + 59_999) / 60_000} 分钟", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, tr("{0} 今天还剩 {1} 分钟", Apps.info(this, p).label, (left + 59_999) / 60_000), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -439,7 +449,7 @@ class GuardService : AccessibilityService() {
                 .putExtra("pkg", pkg).putExtra("why", why)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         } catch (x: Exception) {
-            Toast.makeText(this, "今天的时间用完啦，明天 0:00 见", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("今天的时间用完啦，明天 0:00 见"), Toast.LENGTH_SHORT).show()
         }
         fg = packageName   // 挡住后前台就是留白自己，等无障碍事件更新，不再用延迟的系统记录反复判断
         passPkg = null
@@ -451,7 +461,7 @@ class GuardService : AccessibilityService() {
         try {
             startActivity(Intent(this, MainActivity::class.java).putExtra("open", "focus")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-            Toast.makeText(this, "正在专注，还剩 $m 分钟", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("正在专注，还剩 {0} 分钟", m), Toast.LENGTH_SHORT).show()
         } catch (x: Exception) {
             performGlobalAction(GLOBAL_ACTION_HOME)
         }
@@ -479,7 +489,8 @@ class GuardService : AccessibilityService() {
     /** 在留白的应用信息页、无障碍页里点了危险按钮或开关：退回去。 */
     private fun guardClick(e: AccessibilityEvent) {
         val said = (e.text.joinToString(" ") + " " + (e.contentDescription ?: "") + " " + (try { e.source?.let { "${it.text ?: ""} ${it.contentDescription ?: ""} ${it.viewIdResourceName ?: ""}" } ?: "" } catch (x: Exception) { "" }))
-        val danger = DANGER.any { it in said } || "删除" in said || "uninstall" in said.lowercase() || "delete" in said.lowercase()
+        val low = said.lowercase()
+        val danger = DANGER.any { it.lowercase() in low } || REMOVE.any { it.lowercase() in low }
         // 桌面：刚长按过留白，再点卸载 / 垃圾桶
         if ((e.packageName?.toString() == homePkg || "launcher" in (e.packageName?.toString() ?: "")) && longSelf && SystemClock.elapsedRealtime() - longAt < 15_000 && danger) { bounce(); return }
         val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
@@ -487,7 +498,7 @@ class GuardService : AccessibilityService() {
         if (!hasText(root, label)) return
         if (adminAdd(root)) return
         val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
-        if (danger || (isSwitch && hasText(root, "无障碍"))) bounce()
+        if (danger || (isSwitch && A11Y.any { hasText(root, it) })) bounce()
     }
 
     /**
@@ -552,13 +563,13 @@ class GuardService : AccessibilityService() {
 
     /** 「激活卸载锁」的系统页面：上面也有「卸载」「取消」字样，但这是在加锁，不能挡。 */
     private fun adminAdd(root: android.view.accessibility.AccessibilityNodeInfo) =
-        !Admin.on(this) && (hasText(root, "激活此") || hasText(root, "Activate this") || hasText(root, "启用此设备管理") || hasText(root, "设备管理应用") || hasText(root, "安全服务"))
+        !Admin.on(this) && (hasText(root, "激活此") || hasText(root, "Activate this") || hasText(root, "Activer") || hasText(root, "aktivieren") || hasText(root, "Activar") || hasText(root, "有効にする") || hasText(root, "활성화") || hasText(root, "启用此设备管理") || hasText(root, "设备管理应用") || hasText(root, "安全服务"))
 
     private var lastHomeDump = 0L
     /** 同一行字里同时有「留白」和卸载 / 删除等字样（图标名字单独一行，不会误挡）。 */
     private fun sameNode(root: android.view.accessibility.AccessibilityNodeInfo, label: String): Boolean {
         val ns = try { root.findAccessibilityNodeInfosByText(label) } catch (x: Exception) { return false }
-        val words = DANGER + listOf("删除", "移除")
+        val words = DANGER + REMOVE
         return ns.any { n -> val t = "${n.text ?: ""} ${n.contentDescription ?: ""}"; t.trim() != label && words.any { it in t } }
     }
 
@@ -594,7 +605,7 @@ class GuardService : AccessibilityService() {
             if (!sensitive(pk) && "market" !in pk && "appstore" !in pk) continue
             if (!hasText(root, label)) continue
             if (adminAdd(root)) continue
-            val danger = DANGER.any { hasText(root, it) } || hasText(root, "删除") || hasText(root, "移除")
+            val danger = DANGER.any { hasText(root, it) } || REMOVE.any { hasText(root, it) }
             if (!danger) continue
             // 任何别的应用里（安全中心、设置、应用商店、安装器……）同时出现「留白」和卸载 / 停用 / 清除等字样：一律挡
             Diag.log("挡住 $pk：${dump(root).take(160)}")

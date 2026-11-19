@@ -54,7 +54,7 @@ import kotlinx.coroutines.delay
 /** 番茄钟：状态全在 SharedPreferences 里，关掉应用也照样走；守护服务负责到点提醒。 */
 object Focus {
     const val IDLE = 0; const val WORK = 1; const val SHORT = 2; const val LONG = 3
-    val NAMES = mapOf(WORK to "专注", SHORT to "短休", LONG to "长休")
+    val NAMES = mapOf(WORK to tr("专注"), SHORT to tr("短休"), LONG to tr("长休"))
     private fun p(c: Context) = c.getSharedPreferences("focus", Context.MODE_PRIVATE)
 
     fun phase(c: Context) = p(c).getInt("phase", IDLE)
@@ -192,11 +192,11 @@ object Focus {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val nm = c.getSystemService(NotificationManager::class.java) ?: return
-        nm.createNotificationChannel(NotificationChannel("focus", "番茄钟", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("focus", tr("番茄钟"), NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(c, 7, Intent(c, MainActivity::class.java).putExtra("open", "focus")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE)
         nm.notify(77, NotificationCompat.Builder(c, "focus").setSmallIcon(R.drawable.ic_mono)
-            .setContentTitle("预约的专注开始了").setContentText("${Tasks.curTag(c)} · ${len(c, WORK)} 分钟").setAutoCancel(true).setContentIntent(pi).build())
+            .setContentTitle(tr("预约的专注开始了")).setContentText(tr("{0} · {1} 分钟", Tasks.curTag(c), len(c, WORK))).setAutoCancel(true).setContentIntent(pi).build())
     }
 
     private fun notifyDone(c: Context, ph: Int, all: Boolean = false) {
@@ -207,13 +207,13 @@ object Focus {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(c, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val nm = c.getSystemService(NotificationManager::class.java) ?: return
-        nm.createNotificationChannel(NotificationChannel("focus", "番茄钟", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("focus", tr("番茄钟"), NotificationManager.IMPORTANCE_HIGH))
         val pi = PendingIntent.getActivity(c, 7, Intent(c, MainActivity::class.java).putExtra("open", "focus")
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE)
         val (t, s) = when {
-            all -> "这一组都完成了" to "辛苦了，好好休息一下。"
-            ph == WORK -> "专注完成" to "起来走走，喝口水。"
-            else -> "休息结束" to "准备好了，就开始下一个番茄。"
+            all -> tr("这一组都完成了") to tr("辛苦了，好好休息一下。")
+            ph == WORK -> tr("专注完成") to tr("起来走走，喝口水。")
+            else -> tr("休息结束") to tr("准备好了，就开始下一个番茄。")
         }
         nm.notify(77, NotificationCompat.Builder(c, "focus").setSmallIcon(R.drawable.ic_mono)
             .setContentTitle(t).setContentText(s).setAutoCancel(true).setContentIntent(pi).build())
@@ -261,14 +261,14 @@ fun FocusScreen(onBack: () -> Unit = {}) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Column(Modifier.fillMaxWidth()) {
-            Text("‹ 返回", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
+            Text(tr("‹ 返回"), fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
                 .clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
-            Text("专注", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+            Text(tr("专注"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
             Text(
                 when {
-                    scholar -> "无敌模式：专注时只开放白名单里的应用"
-                    Focus.lockApps(c) -> "专注时，守护中的应用都会暂停开放"
-                    else -> "一次只做一件事"
+                    scholar -> tr("无敌模式：专注时只开放白名单里的应用")
+                    Focus.lockApps(c) -> tr("专注时，守护中的应用都会暂停开放")
+                    else -> tr("一次只做一件事")
                 },
                 fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp)
             )
@@ -313,10 +313,10 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                     fontFamily = FontFamily.SansSerif, letterSpacing = 1.sp)
                 Text(
                     when {
-                        phase == Focus.IDLE -> "准备好了就开始"
-                        !running -> "已暂停"
-                        isBreak -> "放松一下"
-                        else -> "正在专注"
+                        phase == Focus.IDLE -> tr("准备好了就开始")
+                        !running -> tr("已暂停")
+                        isBreak -> tr("放松一下")
+                        else -> tr("正在专注")
                     },
                     fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp)
                 )
@@ -330,12 +330,12 @@ fun FocusScreen(onBack: () -> Unit = {}) {
         val lp = remember(tick) { Focus.loop(c) }
         TaskChip(enabled = !strict)
         FlowRowDots(sq, ps, phase != Focus.IDLE)
-        if (lps > 0) Text("第 ${lp + 1} / $lps 遍", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
+        if (lps > 0) Text(tr("第 {0} / {1} 遍", lp + 1, lps), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
 
         // 主按钮 + 两个轻按钮
         Row(Modifier.padding(top = 30.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "重置", fontSize = 14.sp, color = if (phase != Focus.IDLE && !strict) C.Soft else C.Faint,
+                tr("重置"), fontSize = 14.sp, color = if (phase != Focus.IDLE && !strict) C.Soft else C.Faint,
                 modifier = Modifier.width(72.dp).clip(RoundedCornerShape(12.dp))
                     .clickable(enabled = phase != Focus.IDLE && !strict) { Focus.stop(c); tick++ }.padding(vertical = 12.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -373,32 +373,32 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 }
             }
             Text(
-                "跳过", fontSize = 14.sp, color = if (phase != Focus.IDLE && !strict) C.Soft else C.Faint,
+                tr("跳过"), fontSize = 14.sp, color = if (phase != Focus.IDLE && !strict) C.Soft else C.Faint,
                 modifier = Modifier.width(72.dp).clip(RoundedCornerShape(12.dp))
                     .clickable(enabled = phase != Focus.IDLE && !strict) { Focus.skip(c); tick++ }.padding(vertical = 12.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
         }
 
-        if (strict) Text("无敌模式下，这个番茄要做完才能停", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 12.dp))
+        if (strict) Text(tr("无敌模式下，这个番茄要做完才能停"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 12.dp))
 
         // 时长：直接放在主页，点数字就能改
         SoftCard(Modifier.fillMaxWidth().padding(top = 26.dp)) {
             var lw by remember { mutableStateOf(Focus.len(c, Focus.WORK)) }
             var ls by remember { mutableStateOf(Focus.len(c, Focus.SHORT)) }
             var ll by remember { mutableStateOf(Focus.len(c, Focus.LONG)) }
-            Text("时长", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-            FreeMinutes("专注", lw) { lw = it; Focus.setLen(c, Focus.WORK, it); tick++ }
-            FreeMinutes("短休", ls) { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
-            FreeMinutes("长休", ll) { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
+            Text(tr("时长"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+            FreeMinutes(tr("专注"), lw) { lw = it; Focus.setLen(c, Focus.WORK, it); tick++ }
+            FreeMinutes(tr("短休"), ls) { ls = it; Focus.setLen(c, Focus.SHORT, it); tick++ }
+            FreeMinutes(tr("长休"), ll) { ll = it; Focus.setLen(c, Focus.LONG, it); tick++ }
         }
 
         // 无敌模式卡片
         SoftCard(Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("无敌模式", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-                    Text("专注时，除了白名单都打不开", fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
+                    Text(tr("无敌模式"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                    Text(tr("专注时，除了白名单都打不开"), fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
                 }
                 androidx.compose.material3.Switch(
                     checked = scholar, enabled = !strict,
@@ -414,11 +414,11 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                     .clickable(enabled = !strict) { showWl = true }.padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("白名单", fontSize = 14.sp, color = C.Ink, modifier = Modifier.weight(1f))
-                Text(if (wl.isEmpty()) "还没选" else "${wl.size} 个应用", fontSize = 13.sp, color = C.Soft)
+                Text(tr("白名单"), fontSize = 14.sp, color = C.Ink, modifier = Modifier.weight(1f))
+                Text(if (wl.isEmpty()) tr("还没选") else tr("{0} 个应用", wl.size), fontSize = 13.sp, color = C.Soft)
                 Text("  ›", fontSize = 16.sp, color = C.Faint)
             }
-            if (strict) Text("专注中不能改，休息时再调整", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
+            if (strict) Text(tr("专注中不能改，休息时再调整"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 8.dp))
         }
 
         // 白噪音：一行入口，点开单独选
@@ -429,8 +429,8 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
-                Text("白噪音", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-                Text(if (Noise.inBreak(c)) "专注和休息时播放" else "仅专注时播放", fontSize = 12.sp, color = C.Soft,
+                Text(tr("白噪音"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                Text(if (Noise.inBreak(c)) tr("专注和休息时播放") else tr("仅专注时播放"), fontSize = 12.sp, color = C.Soft,
                     modifier = Modifier.padding(top = 2.dp))
             }
             Text(Noise.label(nk), fontSize = 14.sp, color = if (nk == "off") C.Faint else accent, fontWeight = FontWeight.Medium)
@@ -442,11 +442,11 @@ fun FocusScreen(onBack: () -> Unit = {}) {
         val mins = remember(tick / 4) { Focus.todayMin(c) }
         Row(Modifier.padding(top = 36.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SoftCard(Modifier.weight(1f)) {
-                Text("今天的番茄", fontSize = 12.sp, color = C.Soft)
+                Text(tr("今天的番茄"), fontSize = 12.sp, color = C.Soft)
                 Text("$cnt", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = C.Ink, modifier = Modifier.padding(top = 2.dp))
             }
             SoftCard(Modifier.weight(1f)) {
-                Text("专注时长", fontSize = 12.sp, color = C.Soft)
+                Text(tr("专注时长"), fontSize = 12.sp, color = C.Soft)
                 Text(if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "${mins}m", fontSize = 26.sp,
                     fontWeight = FontWeight.SemiBold, color = C.Ink, modifier = Modifier.padding(top = 2.dp))
             }
@@ -454,7 +454,7 @@ fun FocusScreen(onBack: () -> Unit = {}) {
 
         // 设置：默认收起
         Text(
-            if (showSet) "收起设置" else "设置", fontSize = 13.sp, color = C.Soft,
+            if (showSet) tr("收起设置") else tr("设置"), fontSize = 13.sp, color = C.Soft,
             modifier = Modifier.padding(top = 18.dp).clip(RoundedCornerShape(10.dp)).clickable { showSet = !showSet }
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         )
@@ -463,9 +463,9 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 var lock by remember { mutableStateOf(Focus.lockApps(c)) }
                 var auto by remember { mutableStateOf(Focus.autoNext(c)) }
                 SeqEditor(enabled = phase == Focus.IDLE) { tick++ }
-                Toggle("专注时锁住守护中的应用", "专注期间打开它们会被送回桌面", lock) { lock = it; Focus.setLockApps(c, it) }
-                Toggle("自动开始下一段", "专注完自动进入休息，休息完自动开始专注", auto) { auto = it; Focus.setAutoNext(c, it) }
-                HushToggle("专注时收起通知", "白名单和电话照常，其他的专注结束后放回来", { Hush.on(it) }, { x, v -> Hush.setOn(x, v) })
+                Toggle(tr("专注时锁住守护中的应用"), tr("专注期间打开它们会被送回桌面"), lock) { lock = it; Focus.setLockApps(c, it) }
+                Toggle(tr("自动开始下一段"), tr("专注完自动进入休息，休息完自动开始专注"), auto) { auto = it; Focus.setAutoNext(c, it) }
+                HushToggle(tr("专注时收起通知"), tr("白名单和电话照常，其他的专注结束后放回来"), { Hush.on(it) }, { x, v -> Hush.setOn(x, v) })
                 PlanEditor()
             }
         }
@@ -482,9 +482,9 @@ fun FocusPill(onOpen: () -> Unit) {
     val phase = remember(tick) { Focus.phase(c) }
     val running = remember(tick) { Focus.running(c) }
     val text = when {
-        phase == Focus.IDLE -> "开始一个番茄"
-        !running -> "${Focus.NAMES[phase]} 已暂停 · ${mmss(Focus.leftMs(c))}"
-        else -> "${Focus.NAMES[phase]}中 · ${mmss(Focus.leftMs(c))}"
+        phase == Focus.IDLE -> tr("开始一个番茄")
+        !running -> tr("{0} 已暂停 · {1}", Focus.NAMES[phase], mmss(Focus.leftMs(c)))
+        else -> tr("{0}中 · {1}", Focus.NAMES[phase], mmss(Focus.leftMs(c)))
     }
     val dot = if (phase == Focus.SHORT || phase == Focus.LONG) C.Sage else C.Clay
     Row(
@@ -509,10 +509,10 @@ fun WhitelistScreen(onBack: () -> Unit) {
     val ess = remember { Focus.essentials(c) }
     androidx.activity.compose.BackHandler { Focus.setWhitelist(c, sel.toSet()); onBack() }
     Column(Modifier.fillMaxSize().padding(horizontal = 22.dp)) {
-        Text("‹ 完成", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
+        Text(tr("‹ 完成"), fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
             .clip(RoundedCornerShape(10.dp)).clickable { Focus.setWhitelist(c, sel.toSet()); onBack() }.padding(vertical = 4.dp))
-        Text("白名单", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text("无敌模式下只有这些能打开。电话、短信、输入法已默认放行。", fontSize = 14.sp, color = C.Soft,
+        Text(tr("白名单"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+        Text(tr("无敌模式下只有这些能打开。电话、短信、输入法已默认放行。"), fontSize = 14.sp, color = C.Soft,
             lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
         val list = apps
         if (list == null) {
@@ -573,7 +573,7 @@ fun FocusButton(onOpen: () -> Unit) {
         }
         Spacer(Modifier.width(8.dp))
         Text(
-            if (phase == Focus.IDLE) Look.label("focus", "专注") else mmss(Focus.leftMs(c)),
+            if (phase == Focus.IDLE) Look.label("focus", tr("专注")) else mmss(Focus.leftMs(c)),
             fontSize = (14 * s).sp, color = ink, fontWeight = FontWeight.Medium
         )
     }
@@ -591,15 +591,15 @@ fun NoiseScreen(onBack: () -> Unit) {
     DisposableEffect(Unit) { onDispose { Noise.preview = null; Noise.sync(c) } }
     androidx.activity.compose.BackHandler { leave() }
     val groups = listOf(
-        "自然" to listOf("rain", "storm", "waves", "stream", "wind", "fireplace", "summer_night", "birds"),
-        "城市" to listOf("coffee_shop", "city", "train", "boat"),
-        "纯噪音" to listOf("white", "pink", "brown")
+        tr("自然") to listOf("rain", "storm", "waves", "stream", "wind", "fireplace", "summer_night", "birds"),
+        tr("城市") to listOf("coffee_shop", "city", "train", "boat"),
+        tr("纯噪音") to listOf("white", "pink", "brown")
     )
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
-        Text("‹ 完成", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
+        Text(tr("‹ 完成"), fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
             .clip(RoundedCornerShape(10.dp)).clickable { leave() }.padding(vertical = 4.dp))
-        Text("白噪音", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text("点一下试听，选好后专注时自动播放", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+        Text(tr("白噪音"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+        Text(tr("点一下试听，选好后专注时自动播放"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
 
         @Composable
         fun cell(k: String, mod: Modifier) {
@@ -631,8 +631,8 @@ fun NoiseScreen(onBack: () -> Unit) {
         }
 
         SoftCard(Modifier.fillMaxWidth().padding(top = 16.dp)) {
-            StepSlider("音量", vol, 10..100, 10, "%") { vol = it; Noise.setVolume(c, it) }
-            Toggle("休息时也播放", "默认只在专注时播放", nb) { nb = it; Noise.setInBreak(c, it) }
+            StepSlider(tr("音量"), vol, 10..100, 10, "%") { vol = it; Noise.setVolume(c, it) }
+            Toggle(tr("休息时也播放"), tr("默认只在专注时播放"), nb) { nb = it; Noise.setInBreak(c, it) }
         }
         Spacer(Modifier.height(32.dp))
     }
@@ -667,24 +667,24 @@ private fun SeqEditor(enabled: Boolean, onChange: () -> Unit) {
     var sq by remember { mutableStateOf(Focus.seq(c)) }
     var loops by remember { mutableStateOf(Focus.loops(c)) }
     fun save(l: List<Int>) { sq = l; Focus.setSeq(c, l); onChange() }
-    Text("顺序", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
-    Text(if (enabled) "把右边的拼块拖进左边的槽里，拖到哪就插在哪；槽里的拼块可以上下拖动换顺序，拖出槽就删掉，点一下换类型"
-        else "专注或休息进行中，结束后再改",
+    Text(tr("顺序"), fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+    Text(if (enabled) tr("把右边的拼块拖进左边的槽里，拖到哪就插在哪；槽里的拼块可以上下拖动换顺序，拖出槽就删掉，点一下换类型")
+        else tr("专注或休息进行中，结束后再改"),
         fontSize = 12.sp, color = C.Faint, lineHeight = 17.sp)
     PuzzleBoard(sq, enabled) { save(it) }
     Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Spacer(Modifier.weight(1f))
-        Text("恢复默认", fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp))
+        Text(tr("恢复默认"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp))
             .clickable(enabled = enabled) { save(Focus.DEFAULT_SEQ.map { it.digitToInt() }) }.padding(vertical = 6.dp, horizontal = 4.dp))
     }
     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("循环次数", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold)
-            Text("整组走完几遍后停下", fontSize = 12.sp, color = C.Faint)
+            Text(tr("循环次数"), fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold)
+            Text(tr("整组走完几遍后停下"), fontSize = 12.sp, color = C.Faint)
         }
         Text("−", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape)
             .clickable { if (loops > 0) { loops -= 1; Focus.setLoops(c, loops); onChange() } }.padding(horizontal = 14.dp, vertical = 4.dp))
-        Text(if (loops == 0) "不限" else "$loops 遍", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Clay,
+        Text(if (loops == 0) tr("不限") else tr("{0} 遍", loops), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Clay,
             modifier = Modifier.widthIn(min = 56.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Text("+", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape)
             .clickable { loops += 1; Focus.setLoops(c, loops); onChange() }.padding(horizontal = 14.dp, vertical = 4.dp))
@@ -780,7 +780,7 @@ private fun PuzzleBoard(sq: List<Int>, enabled: Boolean, onSave: (List<Int>) -> 
                     .border(1.dp, if (target != null) C.Clay else C.Track, RoundedCornerShape(18.dp))
                     .onGloballyPositioned { val p = it.positionInRoot() - origin; track = androidx.compose.ui.geometry.Rect(p, Size(it.size.width.toFloat(), it.size.height.toFloat())) }
             ) {
-                if (rest.isEmpty() && target == null) Text("把拼块拖进来", fontSize = 13.sp, color = C.Faint, modifier = Modifier.align(Alignment.Center))
+                if (rest.isEmpty() && target == null) Text(tr("把拼块拖进来"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.align(Alignment.Center))
                 val tabPx = with(d) { tab.toPx() }
                 if (target != null) {
                     val y by animateDpAsState(pad + pitch * target, label = "ph")
@@ -822,7 +822,7 @@ private fun PuzzleBoard(sq: List<Int>, enabled: Boolean, onSave: (List<Int>) -> 
                         contentAlignment = Alignment.Center
                     ) { Text(Focus.NAMES[ph]!!, fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.SemiBold) }
                 }
-                Text("按住拖", fontSize = 11.sp, color = C.Faint)
+                Text(tr("按住拖"), fontSize = 11.sp, color = C.Faint)
             }
         }
         // 手指下面跟着走的那块

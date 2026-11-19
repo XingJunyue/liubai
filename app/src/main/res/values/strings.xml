@@ -8,4 +8,12 @@
     <string name="w_list">每个应用今天的进度</string>
     <string name="admin_desc">卸载锁：守护生效期间不能直接卸载留白，想卸载时在留白里连点 10 次「确定」即可解开。</string>
     <string name="sc_focus">留白 · 专注一下</string>
+    <string name="w_ring_name">留白 · 剩余</string>
+    <string name="w_list_name">留白 · 进度</string>
+    <string name="w_icons1_name">留白 · 图标 4×1</string>
+    <string name="w_icons2_name">留白 · 图标 4×2</string>
+    <string name="w_pick_name">小部件显示</string>
+    <string name="hush_name">留白 · 收起通知</string>
+    <string name="w_today">留白 · 今天</string>
+    <string name="w_min_left">分钟可用</string>
 </resources>

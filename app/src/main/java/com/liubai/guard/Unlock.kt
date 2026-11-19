@@ -41,11 +41,11 @@ class UnlockActivity : ComponentActivity() {
                 val done = n >= Unlock.NEED
                 val left = Unlock.NEED - n
                 val line = when {
-                    done -> "好，3 分钟内可以卸载或关闭守护。"
-                    n < 20 -> "确定要拆掉留白吗？"
-                    n < 50 -> "这么点下去，是真的想好了，还是一时上头？"
-                    n < 80 -> "已经过半了。现在放下手机，也来得及。"
-                    else -> "快到了。走之前，记得今天也留了一点空白。"
+                    done -> tr("好，3 分钟内可以卸载或关闭守护。")
+                    n < 20 -> tr("确定要拆掉留白吗？")
+                    n < 50 -> tr("这么点下去，是真的想好了，还是一时上头？")
+                    n < 80 -> tr("已经过半了。现在放下手机，也来得及。")
+                    else -> tr("快到了。走之前，记得今天也留了一点空白。")
                 }
                 Column(
                     Modifier.fillMaxSize().background(C.Cream).systemBarsPadding().padding(horizontal = 26.dp),
@@ -56,7 +56,7 @@ class UnlockActivity : ComponentActivity() {
                     Text(line, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink, textAlign = TextAlign.Center,
                         lineHeight = 30.sp, modifier = Modifier.padding(top = 24.dp))
                     Text(
-                        if (done) "离开这个页面后计时开始" else "连点 ${Unlock.NEED} 次「确定」才能继续，中途离开要重新数",
+                        if (done) tr("离开这个页面后计时开始") else tr("连点 {0} 次「确定」才能继续，中途离开要重新数", Unlock.NEED),
                         fontSize = 13.sp, color = C.Soft, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 10.dp)
                     )
                     Spacer(Modifier.height(30.dp))
@@ -67,10 +67,10 @@ class UnlockActivity : ComponentActivity() {
                     )
                     Spacer(Modifier.weight(1f))
                     if (!done) {
-                        PrimaryButton("确定（还差 $left 次）") { n++; if (n >= Unlock.NEED) Unlock.grant(this@UnlockActivity) }
-                        PrimaryButton("算了，继续守护", Modifier.padding(top = 10.dp, bottom = 26.dp)) { finish() }
+                        PrimaryButton(tr("确定（还差 {0} 次）", left)) { n++; if (n >= Unlock.NEED) Unlock.grant(this@UnlockActivity) }
+                        PrimaryButton(tr("算了，继续守护"), Modifier.padding(top = 10.dp, bottom = 26.dp)) { finish() }
                     } else {
-                        PrimaryButton("去卸载留白") {
+                        PrimaryButton(tr("去卸载留白")) {
                             Admin.release(this@UnlockActivity)
                             try {
                                 startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -79,7 +79,7 @@ class UnlockActivity : ComponentActivity() {
                             }
                             finish()
                         }
-                        PrimaryButton("只是关一下守护，回桌面", Modifier.padding(top = 10.dp, bottom = 26.dp)) {
+                        PrimaryButton(tr("只是关一下守护，回桌面"), Modifier.padding(top = 10.dp, bottom = 26.dp)) {
                             startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             finish()
                         }

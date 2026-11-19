@@ -93,7 +93,7 @@ object Look {
     } catch (x: Throwable) { false }
 
     // ---- 首页三个按键 ----
-    val CORNERS = listOf("tl" to "左上", "tr" to "右上", "bl" to "左下", "br" to "右下")
+    val CORNERS = listOf("tl" to tr("左上"), "tr" to tr("右上"), "bl" to tr("左下"), "br" to tr("右下"))
     fun pos(key: String) = str("p_$key", when (key) { "menu" -> "tl"; "focus" -> "tr"; else -> "br" })
     fun scale(key: String) = num("s_$key", 1f)
     fun keyBg(key: String) = col("b_$key", if (key == "add") C.Clay else C.Card)
@@ -109,14 +109,14 @@ object Look {
 
     /** 可以改字的按键：key 到默认文字。 */
     val NAMES = listOf(
-        "menu_home" to "今天", "menu_groups" to "分组额度", "menu_time" to "时段", "menu_data" to "数据",
-        "menu_widget" to "小部件", "menu_guide" to "使用说明", "menu_update" to "检查更新",
-        "focus" to "专注", "add" to "＋ 添加应用",
-        "pb_回到桌面" to "回到桌面", "pb_算了，不刷了" to "算了，不刷了", "pb_算了，继续守护" to "算了，继续守护",
-        "pb_去卸载留白" to "去卸载留白", "pb_只是关一下守护，回桌面" to "只是关一下守护，回桌面",
-        "pb_开始守护" to "开始守护", "pb_保存" to "保存", "pb_去开启" to "去开启", "pb_去打开" to "去打开",
-        "pb_开启卸载锁" to "开启卸载锁", "pb_我知道了，开始" to "我知道了，开始", "pb_检查更新" to "检查更新",
-        "pb_下载并安装" to "下载并安装", "pb_安装" to "安装", "pb_复制诊断信息" to "复制诊断信息"
+        "menu_home" to tr("今天"), "menu_groups" to tr("分组额度"), "menu_time" to tr("时段"), "menu_data" to tr("数据"),
+        "menu_widget" to tr("小部件"), "menu_guide" to tr("使用说明"), "menu_update" to tr("检查更新"),
+        "focus" to tr("专注"), "add" to tr("＋ 添加应用"),
+        "pb_回到桌面" to tr("回到桌面"), "pb_算了，不刷了" to tr("算了，不刷了"), "pb_算了，继续守护" to tr("算了，继续守护"),
+        "pb_去卸载留白" to tr("去卸载留白"), "pb_只是关一下守护，回桌面" to tr("只是关一下守护，回桌面"),
+        "pb_开始守护" to tr("开始守护"), "pb_保存" to tr("保存"), "pb_去开启" to tr("去开启"), "pb_去打开" to tr("去打开"),
+        "pb_开启卸载锁" to tr("开启卸载锁"), "pb_我知道了，开始" to tr("我知道了，开始"), "pb_检查更新" to tr("检查更新"),
+        "pb_下载并安装" to tr("下载并安装"), "pb_安装" to tr("安装"), "pb_复制诊断信息" to tr("复制诊断信息")
     )
 
     val SWATCH = listOf(
@@ -210,57 +210,57 @@ fun LookScreen() {
     remember { Look.init(c); 0 }
     var msg by remember { mutableStateOf<String?>(null) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u ->
-        if (u != null) msg = if (Look.saveImage(c, u)) null else "这张图片读不出来，换一张试试"
+        if (u != null) msg = if (Look.saveImage(c, u)) null else tr("这张图片读不出来，换一张试试")
     }
     var key by remember { mutableStateOf("focus") }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
-        Text("外观", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 14.dp))
-        Text("背景和按键都能换成你喜欢的样子，按键做的事不变", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+        Text(tr("外观"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 14.dp))
+        Text(tr("背景和按键都能换成你喜欢的样子，按键做的事不变"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
 
-        LookTitle("背景")
+        LookTitle(tr("背景"))
         SoftCard(Modifier.fillMaxWidth()) {
-            Seg(listOf("none" to "默认", "color" to "纯色", "image" to "图片"), Look.bgMode()) {
+            Seg(listOf("none" to tr("默认"), "color" to tr("纯色"), "image" to tr("图片")), Look.bgMode()) {
                 if (it == "image") pick.launch("image/*") else Look.put("bg", it)
             }
-            if (Look.bgMode() == "color") { Small("颜色"); Swatches(Look.bgColor()) { Look.putCol("bgc", it) } }
+            if (Look.bgMode() == "color") { Small(tr("颜色")); Swatches(Look.bgColor()) { Look.putCol("bgc", it) } }
             if (Look.bgMode() == "image") {
-                Text("换一张图片", fontSize = 14.sp, color = C.ClayDeep,
+                Text(tr("换一张图片"), fontSize = 14.sp, color = C.ClayDeep,
                     modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(12.dp)).clickable { pick.launch("image/*") }.padding(vertical = 6.dp))
-                Num("图片上的淡色遮罩", Look.dim(), 0f..0.9f, "${(Look.dim() * 100).toInt()}%") { Look.putNum("dim", it) }
+                Num(tr("图片上的淡色遮罩"), Look.dim(), 0f..0.9f, "${(Look.dim() * 100).toInt()}%") { Look.putNum("dim", it) }
             }
             msg?.let { Text(it, fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.padding(top = 8.dp)) }
-            Num("卡片不透明度", Look.cardAlpha(), 0.3f..1f, "${(Look.cardAlpha() * 100).toInt()}%") { Look.putNum("card", it) }
+            Num(tr("卡片不透明度"), Look.cardAlpha(), 0.3f..1f, "${(Look.cardAlpha() * 100).toInt()}%") { Look.putNum("card", it) }
         }
 
-        LookTitle("首页按键")
+        LookTitle(tr("首页按键"))
         SoftCard(Modifier.fillMaxWidth()) {
-            Seg(listOf("menu" to "菜单", "focus" to "专注", "add" to "添加应用"), key) { key = it }
-            Small("位置")
+            Seg(listOf("menu" to tr("菜单"), "focus" to tr("专注"), "add" to tr("添加应用")), key) { key = it }
+            Small(tr("位置"))
             Seg(Look.CORNERS, Look.pos(key)) { Look.put("p_$key", it) }
-            if (key != "menu") { Small("文字"); NameField(key, if (key == "focus") "专注" else "＋ 添加应用") }
-            Num("大小", Look.scale(key), 0.6f..1.8f, "${(Look.scale(key) * 100).toInt()}%") { Look.putNum("s_$key", it) }
-            Small("底色"); Swatches(Look.keyBg(key)) { Look.putCol("b_$key", it) }
-            Small("文字 / 图标颜色"); Swatches(Look.keyFg(key)) { Look.putCol("f_$key", it) }
+            if (key != "menu") { Small(tr("文字")); NameField(key, if (key == "focus") tr("专注") else tr("＋ 添加应用")) }
+            Num(tr("大小"), Look.scale(key), 0.6f..1.8f, "${(Look.scale(key) * 100).toInt()}%") { Look.putNum("s_$key", it) }
+            Small(tr("底色")); Swatches(Look.keyBg(key)) { Look.putCol("b_$key", it) }
+            Small(tr("文字 / 图标颜色")); Swatches(Look.keyFg(key)) { Look.putCol("f_$key", it) }
         }
 
-        LookTitle("所有大按钮")
+        LookTitle(tr("所有大按钮"))
         SoftCard(Modifier.fillMaxWidth()) {
-            PrimaryButton("预览效果") {}
-            Small("底色"); Swatches(Look.btnBg()) { Look.putCol("btn_bg", it) }
-            Small("文字颜色"); Swatches(Look.btnFg()) { Look.putCol("btn_fg", it) }
-            Num("圆角", Look.btnRadius(), 0f..32f, "${Look.btnRadius().toInt()}") { Look.putNum("btn_r", it) }
-            Num("高度", Look.btnHeight(), 40f..80f, "${Look.btnHeight().toInt()}") { Look.putNum("btn_h", it) }
-            Num("字号", Look.btnFont(), 12f..24f, "${Look.btnFont().toInt()}") { Look.putNum("btn_font", it) }
+            PrimaryButton(tr("预览效果")) {}
+            Small(tr("底色")); Swatches(Look.btnBg()) { Look.putCol("btn_bg", it) }
+            Small(tr("文字颜色")); Swatches(Look.btnFg()) { Look.putCol("btn_fg", it) }
+            Num(tr("圆角"), Look.btnRadius(), 0f..32f, "${Look.btnRadius().toInt()}") { Look.putNum("btn_r", it) }
+            Num(tr("高度"), Look.btnHeight(), 40f..80f, "${Look.btnHeight().toInt()}") { Look.putNum("btn_h", it) }
+            Num(tr("字号"), Look.btnFont(), 12f..24f, "${Look.btnFont().toInt()}") { Look.putNum("btn_font", it) }
         }
 
-        LookTitle("按键文字")
+        LookTitle(tr("按键文字"))
         SoftCard(Modifier.fillMaxWidth()) {
-            Text("留空就是原来的字", fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(bottom = 6.dp))
+            Text(tr("留空就是原来的字"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(bottom = 6.dp))
             Look.NAMES.forEach { (k, d) -> NameField(k, d) }
         }
 
-        Text("全部恢复默认", fontSize = 14.sp, color = C.ClayDeep,
+        Text(tr("全部恢复默认"), fontSize = 14.sp, color = C.ClayDeep,
             modifier = Modifier.padding(top = 22.dp, bottom = 40.dp).clip(RoundedCornerShape(12.dp)).clickable { Look.resetAll(c) }.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }

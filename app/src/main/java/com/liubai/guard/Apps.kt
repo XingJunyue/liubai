@@ -64,13 +64,13 @@ object Virt {
     const val WX = "com.tencent.mm"
     const val FINDER = "com.tencent.mm:finder"
     val SECS = listOf(
-        Sec(FINDER, WX, "微信视频号") { it.startsWith("com.tencent.mm.plugin.finder") },
-        Sec("tv.danmaku.bili:story", "tv.danmaku.bili", "B站竖屏视频") { val l = it.lowercase(); ".story." in l || "storyvideo" in l || "verticalvideo" in l },
-        Sec("com.bilibili.app.in:story", "com.bilibili.app.in", "B站竖屏视频") { val l = it.lowercase(); ".story." in l || "storyvideo" in l },
-        Sec("com.xingin.xhs:video", "com.xingin.xhs", "小红书视频流") { val l = it.lowercase(); "videofeed" in l || "detailfeed" in l && "video" in l },
-        Sec("com.zhihu.android:video", "com.zhihu.android", "知乎视频") { val l = it.lowercase(); "videotab" in l || "zvideo" in l },
-        Sec("com.taobao.taobao:video", "com.taobao.taobao", "淘宝逛逛视频") { val l = it.lowercase(); "videofeed" in l || "guangguang" in l || "fullscreenvideo" in l },
-        Sec("com.baidu.searchbox:video", "com.baidu.searchbox", "百度视频") { val l = it.lowercase(); "minivideo" in l || "videodetail" in l || "immersive" in l },
+        Sec(FINDER, WX, tr("微信视频号")) { it.startsWith("com.tencent.mm.plugin.finder") },
+        Sec("tv.danmaku.bili:story", "tv.danmaku.bili", tr("B站竖屏视频")) { val l = it.lowercase(); ".story." in l || "storyvideo" in l || "verticalvideo" in l },
+        Sec("com.bilibili.app.in:story", "com.bilibili.app.in", tr("B站竖屏视频")) { val l = it.lowercase(); ".story." in l || "storyvideo" in l },
+        Sec("com.xingin.xhs:video", "com.xingin.xhs", tr("小红书视频流")) { val l = it.lowercase(); "videofeed" in l || "detailfeed" in l && "video" in l },
+        Sec("com.zhihu.android:video", "com.zhihu.android", tr("知乎视频")) { val l = it.lowercase(); "videotab" in l || "zvideo" in l },
+        Sec("com.taobao.taobao:video", "com.taobao.taobao", tr("淘宝逛逛视频")) { val l = it.lowercase(); "videofeed" in l || "guangguang" in l || "fullscreenvideo" in l },
+        Sec("com.baidu.searchbox:video", "com.baidu.searchbox", tr("百度视频")) { val l = it.lowercase(); "minivideo" in l || "videodetail" in l || "immersive" in l },
         Sec("com.google.android.youtube:shorts", "com.google.android.youtube", "YouTube Shorts") { val l = it.lowercase(); "shorts" in l || "reel" in l },
         Sec("com.instagram.android:reels", "com.instagram.android", "Instagram Reels") { val l = it.lowercase(); "reel" in l || "clips" in l }
     )

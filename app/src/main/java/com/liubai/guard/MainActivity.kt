@@ -105,8 +105,8 @@ fun App() {
                         Sprout(44.dp)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("留白", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-                            Text("给生活留一点空白", fontSize = 12.sp, color = C.Faint)
+                            Text(tr("留白"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+                            Text(tr("给生活留一点空白"), fontSize = 12.sp, color = C.Faint)
                         }
                         Box(
                             Modifier.size(42.dp).clip(CircleShape).background(if (screen == "settings") C.ClayPale else C.Card).clickable { go("settings") },
@@ -115,20 +115,20 @@ fun App() {
                             Gear(if (screen == "settings") C.ClayDeep else C.Ink)
                         }
                     }
-                    DrawerItem(Look.label("menu_home", "今天"), screen == "home") { go("home") }
-                    DrawerItem(Look.label("menu_groups", "分组额度"), screen == "groups") { go("groups") }
-                    DrawerItem(Look.label("menu_time", "时段"), screen == "time") { go("time") }
-                    DrawerItem(Look.label("menu_data", "数据"), screen == "weekly") { go("weekly") }
-                    DrawerItem(Look.label("menu_widget", "小部件"), screen == "widget") { go("widget") }
-                    DrawerItem(Look.label("menu_look", "外观"), screen == "look") { go("look") }
+                    DrawerItem(Look.label("menu_home", tr("今天")), screen == "home") { go("home") }
+                    DrawerItem(Look.label("menu_groups", tr("分组额度")), screen == "groups") { go("groups") }
+                    DrawerItem(Look.label("menu_time", tr("时段")), screen == "time") { go("time") }
+                    DrawerItem(Look.label("menu_data", tr("数据")), screen == "weekly") { go("weekly") }
+                    DrawerItem(Look.label("menu_widget", tr("小部件")), screen == "widget") { go("widget") }
+                    DrawerItem(Look.label("menu_look", tr("外观")), screen == "look") { go("look") }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 12.sp, color = C.Faint)
-                        Text(if (BuildConfig.PLAY) "关于" else Look.label("menu_update", "检查更新"), fontSize = 12.sp, color = C.ClayDeep,
+                        Text(tr("版本 {0}", BuildConfig.VERSION_NAME), fontSize = 12.sp, color = C.Faint)
+                        Text(if (BuildConfig.PLAY) tr("关于") else Look.label("menu_update", tr("检查更新")), fontSize = 12.sp, color = C.ClayDeep,
                             modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { go("about") }.padding(horizontal = 8.dp, vertical = 6.dp))
                         Spacer(Modifier.weight(1f))
                         Text(
-                            Look.label("menu_guide", "使用说明"), fontSize = 13.sp,
+                            Look.label("menu_guide", tr("使用说明")), fontSize = 13.sp,
                             color = if (screen == "guide") C.ClayDeep else C.Soft,
                             fontWeight = if (screen == "guide") FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { go("guide") }.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -205,7 +205,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
     val usageOk = remember(tick) { Usage.granted(c) }
     val (used, total) = Stats.totals(rows)
     val left = (total - used).coerceAtLeast(0)
-    val date = remember { SimpleDateFormat("M月d日 · EEEE", Locale.CHINA).format(Date()) }
+    val date = remember { SimpleDateFormat(tr("M月d日 · EEEE"), Tr.locale()).format(Date()) }
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -216,7 +216,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
             GreetingArea(poemsOn)
             val bed = remember(tick) { Store.bedActive(c) }
-            if (bed.on) Chip("睡前锁定 ${Rules.clock(bed.from)}–${Rules.clock(bed.to)}")
+            if (bed.on) Chip(tr("睡前锁定 {0}–{1}", Rules.clock(bed.from), Rules.clock(bed.to)))
 
             if (!usageOk) {
                 Spacer(Modifier.height(18.dp))
@@ -234,21 +234,21 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
                     Ring(if (total == 0) 0f else used.toFloat() / total) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(if (total == 0) "—" else "$left", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-                            Text("分钟可用", fontSize = 12.sp, color = C.Faint)
+                            Text(tr("分钟可用"), fontSize = 12.sp, color = C.Faint)
                         }
                     }
                     Spacer(Modifier.width(18.dp))
                     Column {
                         if (total == 0) {
-                            Text("还没有守护的应用", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-                            Text("点右下角，给常刷的应用留点白", fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 6.dp), lineHeight = 20.sp)
+                            Text(tr("还没有守护的应用"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                            Text(tr("点右下角，给常刷的应用留点白"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 6.dp), lineHeight = 20.sp)
                         } else {
-                            Text("今天已用 $used 分钟", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                            Text(tr("今天已用 {0} 分钟", used), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
                             Text(
-                                "总额度 $total 分钟\n" + when {
-                                    left == 0 -> "今天辛苦啦，好好休息"
-                                    used * 2 < total -> "节奏很好，继续保持"
-                                    else -> "慢一点，留些时间给自己"
+                                tr("总额度 {0} 分钟\n", total) + when {
+                                    left == 0 -> tr("今天辛苦啦，好好休息")
+                                    used * 2 < total -> tr("节奏很好，继续保持")
+                                    else -> tr("慢一点，留些时间给自己")
                                 },
                                 fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
                             )
@@ -259,8 +259,8 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
 
             if (rows.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 10.dp), verticalAlignment = Alignment.Bottom) {
-                    Text("守护中的应用", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
-                    Text("0:00 自动重置", fontSize = 12.sp, color = C.Faint)
+                    Text(tr("守护中的应用"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
+                    Text(tr("0:00 自动重置"), fontSize = 12.sp, color = C.Faint)
                 }
                 SoftCard(Modifier.fillMaxWidth()) {
                     rows.forEachIndexed { i, r ->
@@ -274,18 +274,18 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.Bottom) {
                                     Text(app.label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink, modifier = Modifier.weight(1f), maxLines = 1)
-                                    Text("${r.usedMin} / ${r.limit} 分钟", fontSize = 13.sp, color = C.Soft)
+                                    Text(tr("{0} / {1} 分钟", r.usedMin, r.limit), fontSize = 13.sp, color = C.Soft)
                                 }
                                 Spacer(Modifier.height(9.dp))
                                 SoftBar(r.frac, r.done)
                                 FlowRowLite {
-                                    if (r.done) Chip("今天已休息 · 明天 0:00 见")
-                                    else if (r.left <= 10) Chip("只剩 ${r.left} 分钟啦", warm = true)
+                                    if (r.done) Chip(tr("今天已休息 · 明天 0:00 见"))
+                                    else if (r.left <= 10) Chip(tr("只剩 {0} 分钟啦", r.left), warm = true)
                                     for (t in Rules.summary(Store.extraActive(c, r.pkg))) Chip(t)
                                     when (r.tomorrow) {
                                         null -> {}
-                                        0 -> Chip("明天起不再守护", warm = true)
-                                        else -> Chip("明天起 ${r.tomorrow} 分钟", warm = true)
+                                        0 -> Chip(tr("明天起不再守护"), warm = true)
+                                        else -> Chip(tr("明天起 {0} 分钟", r.tomorrow), warm = true)
                                     }
                                 }
                             }
@@ -297,7 +297,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
 
             if (on && rows.isNotEmpty()) {
                 Text(
-                    "今天只能改得更严：调低立刻生效；调高、移除要等明天 0:00。",
+                    tr("今天只能改得更严：调低立刻生效；调高、移除要等明天 0:00。"),
                     fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp,
                     modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp)
                 )
@@ -323,7 +323,7 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
                         Box(
                             Modifier.clip(RoundedCornerShape((22 * s).dp)).background(Look.keyBg("add")).clickable { onAdd() }
                                 .padding(horizontal = (22 * s).dp, vertical = (15 * s).dp)
-                        ) { Text(Look.label("add", "＋ 添加应用"), color = Look.keyFg("add"), fontSize = (15 * s).sp, fontWeight = FontWeight.SemiBold) }
+                        ) { Text(Look.label("add", tr("＋ 添加应用")), color = Look.keyFg("add"), fontSize = (15 * s).sp, fontWeight = FontWeight.SemiBold) }
                     }
                 }
             }
@@ -343,13 +343,13 @@ fun FlowRowLite(content: @Composable RowScope.() -> Unit) {
 fun UsageGuide() {
     val c = LocalContext.current
     SoftCard(Modifier.fillMaxWidth()) {
-        Text("先让留白看见你的使用时长", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("先让留白看见你的使用时长"), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "打开「使用情况访问权限」，留白就能读到今天每个应用真实用了多久，和系统自带的屏幕使用时间是同一份数据，装之前用掉的也会算上。",
+            tr("打开「使用情况访问权限」，留白就能读到今天每个应用真实用了多久，和系统自带的屏幕使用时间是同一份数据，装之前用掉的也会算上。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Spacer(Modifier.height(12.dp))
-        PrimaryButton("去开启") {
+        PrimaryButton(tr("去开启")) {
             try {
                 c.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (x: Exception) {
@@ -376,37 +376,37 @@ fun KeepTip(force: Boolean = false) {
     val notifAsk = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { startPair() }
     if (hide || done) return
     SoftCard(Modifier.fillMaxWidth()) {
-        Text("锁屏后留白总被关掉？", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("锁屏后留白总被关掉？"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         if (!WAdb.supported()) {
-            Text("允许它自启动、电池设成不限制、在最近任务里给它上把锁，就能少被关掉。",
+            Text(tr("允许它自启动、电池设成不限制、在最近任务里给它上把锁，就能少被关掉。"),
                 fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
         } else {
             Text(
-                "授权一次，以后被系统关掉它会自己重新打开。连着 Wi-Fi 就行，不用电脑，也不用装别的：\n" +
-                    "1. 点「开始授权」，会跳到开发者选项\n" +
-                    "2. 打开「无线调试」，点进去，再点「使用配对码配对设备」\n" +
-                    "3. 出现 6 位配对码后，留白会自己读出来完成配对；没反应的话，下拉通知栏把数字填进去\n" +
-                    "没有开发者选项的话，去「关于手机」连点版本号 7 次。",
+                tr("授权一次，以后被系统关掉它会自己重新打开。连着 Wi-Fi 就行，不用电脑，也不用装别的：\n") +
+                    tr("1. 点「开始授权」，会跳到开发者选项\n") +
+                    tr("2. 打开「无线调试」，点进去，再点「使用配对码配对设备」\n") +
+                    tr("3. 出现 6 位配对码后，留白会自己读出来完成配对；没反应的话，下拉通知栏把数字填进去\n") +
+                    tr("没有开发者选项的话，去「关于手机」连点版本号 7 次。"),
                 fontSize = 13.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 6.dp)
             )
             when {
-                st == "working" -> Text("正在配对…", fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.padding(top = 8.dp))
+                st == "working" -> Text(tr("正在配对…"), fontSize = 13.sp, color = C.ClayDeep, modifier = Modifier.padding(top = 8.dp))
                 st.startsWith("error:") -> Text(st.removePrefix("error:").take(160), fontSize = 13.sp, color = C.ClayDeep, lineHeight = 20.sp, modifier = Modifier.padding(top = 8.dp))
             }
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(if (st == "waiting") "去无线调试" else "开始授权") {
+            PrimaryButton(if (st == "waiting") tr("去无线调试") else tr("开始授权")) {
                 if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(c, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                     notifAsk.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 else startPair()
             }
         }
         Row(Modifier.padding(top = 8.dp)) {
-            Text("打开应用信息", color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            Text(tr("打开应用信息"), color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
                     c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }.padding(vertical = 6.dp))
             Spacer(Modifier.weight(1f))
-            if (!force) Text("知道了", color = C.Faint, fontSize = 14.sp,
+            if (!force) Text(tr("知道了"), color = C.Faint, fontSize = 14.sp,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
                     c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("keepTipHide", true).apply(); hide = true
                 }.padding(vertical = 6.dp, horizontal = 8.dp))
@@ -425,11 +425,11 @@ fun LockTip(force: Boolean = false, onResult: () -> Unit = {}) {
     }
     if (hide) return
     SoftCard(Modifier.fillMaxWidth()) {
-        Text("给留白加一把卸载锁", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-        Text("开启后，长按图标或在应用信息里都不能直接卸载。真想卸载，在留白里连点 10 次「确定」，锁会自己解开；今天不再守护任何应用时也会自动解开。",
+        Text(tr("给留白加一把卸载锁"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("开启后，长按图标或在应用信息里都不能直接卸载。真想卸载，在留白里连点 10 次「确定」，锁会自己解开；今天不再守护任何应用时也会自动解开。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
         Spacer(Modifier.height(12.dp))
-        PrimaryButton("开启卸载锁") {
+        PrimaryButton(tr("开启卸载锁")) {
             try { ask.launch(Admin.askIntent(c)) } catch (x: Exception) {
                 Diag.log("卸载锁打不开：${x.message}")
                 try { c.startActivity(Intent().setClassName("com.android.settings", "com.android.settings.DeviceAdminSettings").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (y: Exception) {}
@@ -437,7 +437,7 @@ fun LockTip(force: Boolean = false, onResult: () -> Unit = {}) {
         }
         if (!force) Row(Modifier.padding(top = 8.dp)) {
             Spacer(Modifier.weight(1f))
-            Text("以后再说", color = C.Faint, fontSize = 14.sp,
+            Text(tr("以后再说"), color = C.Faint, fontSize = 14.sp,
                 modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
                     c.getSharedPreferences("liubai_ui", Context.MODE_PRIVATE).edit().putBoolean("lockTipHide", true).apply(); hide = true
                 }.padding(vertical = 6.dp, horizontal = 8.dp))
@@ -449,25 +449,25 @@ fun LockTip(force: Boolean = false, onResult: () -> Unit = {}) {
 fun SetupGuide() {
     val c = LocalContext.current
     SoftCard(Modifier.fillMaxWidth()) {
-        Text("让留白陪着你", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("让留白陪着你"), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Text(
-            "打开「无障碍」，留白才知道你此刻在用什么。它只看应用名字，不看内容，也不会上传。",
+            tr("打开「无障碍」，留白才知道你此刻在用什么。它只看应用名字，不看内容，也不会上传。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Spacer(Modifier.height(12.dp))
-        PrimaryButton("去打开") { Consent.openA11y(c) }
+        PrimaryButton(tr("去打开")) { Consent.openA11y(c) }
         Spacer(Modifier.height(14.dp))
-        Text("系统有时会悄悄把它关掉，顺手做这几件小事就稳了：", fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp)
+        Text(tr("系统有时会悄悄把它关掉，顺手做这几件小事就稳了："), fontSize = 13.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp)
         Text(
-            "· 开关是灰的、点不动：进应用信息，右上角菜单里选「允许受限制的设置」\n" +
-                "· 允许留白自启动、在后台运行\n" +
-                "· 电池 / 省电里，把留白设成不限制\n" +
-                "· 允许留白在后台弹出界面\n" +
-                "· 在最近任务里给留白上把锁",
+            tr("· 开关是灰的、点不动：进应用信息，右上角菜单里选「允许受限制的设置」\n") +
+                tr("· 允许留白自启动、在后台运行\n") +
+                tr("· 电池 / 省电里，把留白设成不限制\n") +
+                tr("· 允许留白在后台弹出界面\n") +
+                tr("· 在最近任务里给留白上把锁"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 6.dp)
         )
         Text(
-            "打开应用信息",
+            tr("打开应用信息"),
             color = C.ClayDeep, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(12.dp)).clickable {
                 c.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${c.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -498,12 +498,12 @@ fun EditSheet(pkg: String, onClose: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text(app.label, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-                    Text("今天已用 $usedMin 分钟 · 今天的额度 $today 分钟", fontSize = 13.sp, color = C.Soft)
+                    Text(tr("今天已用 {0} 分钟 · 今天的额度 {1} 分钟", usedMin, today), fontSize = 13.sp, color = C.Soft)
                 }
             }
             Row(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
                 Text("$n", fontSize = 56.sp, fontWeight = FontWeight.Bold, color = C.Clay)
-                Text(" 分钟 / 天", fontSize = 18.sp, color = C.Soft, modifier = Modifier.padding(bottom = 12.dp))
+                Text(tr(" 分钟 / 天"), fontSize = 18.sp, color = C.Soft, modifier = Modifier.padding(bottom = 12.dp))
             }
             MinuteSlider(v) { v = it }
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -519,20 +519,20 @@ fun EditSheet(pkg: String, onClose: () -> Unit) {
             ModeEditor(x) { x = it }
             val looser = Rules.stricter(xToday, x) != x
             val note = when {
-                n > today && looser -> "调高时长、放宽守护方式要明天 0:00 才生效，更严的部分现在就生效。"
-                n > today -> "调高的部分要明天 0:00 才生效，今天仍按 $today 分钟。"
-                looser -> "放宽守护方式要明天 0:00 才生效，今天先按原来的。"
-                n < today -> "调低会马上生效，今天就按 $n 分钟。"
-                else -> "今天只能改得更严：更严的立刻生效，放宽、移除要等明天 0:00。"
+                n > today && looser -> tr("调高时长、放宽守护方式要明天 0:00 才生效，更严的部分现在就生效。")
+                n > today -> tr("调高的部分要明天 0:00 才生效，今天仍按 {0} 分钟。", today)
+                looser -> tr("放宽守护方式要明天 0:00 才生效，今天先按原来的。")
+                n < today -> tr("调低会马上生效，今天就按 {0} 分钟。", n)
+                else -> tr("今天只能改得更严：更严的立刻生效，放宽、移除要等明天 0:00。")
             }
             Note(note, warm = looser || n > today)
             Spacer(Modifier.height(18.dp))
-            PrimaryButton("保存") {
+            PrimaryButton(tr("保存")) {
                 val d = Store.desired(c).toMutableMap(); d[pkg] = n
                 Store.setDesired(c, d); Store.setExtra(c, pkg, x); Widgets.updateAll(c); onClose()
             }
             Text(
-                "不再守护它（明天生效）", color = C.Soft, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                tr("不再守护它（明天生效）"), color = C.Soft, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable {
                     val d = Store.desired(c).toMutableMap(); d.remove(pkg)
                     Store.setDesired(c, d); Store.setExtra(c, pkg, null); Widgets.updateAll(c); onClose()
@@ -551,8 +551,8 @@ fun MinuteSlider(v: Float, onChange: (Float) -> Unit) {
         modifier = Modifier.padding(top = 12.dp)
     )
     Row(Modifier.fillMaxWidth()) {
-        Text("5 分钟", fontSize = 12.sp, color = C.Faint, modifier = Modifier.weight(1f))
-        Text("4 小时", fontSize = 12.sp, color = C.Faint)
+        Text(tr("5 分钟"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.weight(1f))
+        Text(tr("4 小时"), fontSize = 12.sp, color = C.Faint)
     }
 }
 
@@ -566,11 +566,11 @@ fun Picker(onBack: () -> Unit, onNext: (List<AppInfo>) -> Unit) {
     val sel = remember { mutableStateListOf<String>() }
 
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 22.dp)) {
-        Text("‹ 返回", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
-        Text("想给谁留点白？", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text("选好应用，再给它一个每天的时长", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+        Text(tr("‹ 返回"), fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
+        Text(tr("想给谁留点白？"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+        Text(tr("选好应用，再给它一个每天的时长"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
         Box(Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Sand).padding(horizontal = 16.dp, vertical = 13.dp)) {
-            if (q.isEmpty()) Text("搜索应用", fontSize = 14.sp, color = C.Faint)
+            if (q.isEmpty()) Text(tr("搜索应用"), fontSize = 14.sp, color = C.Faint)
             BasicTextField(q, { q = it }, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth())
         }
         val list = apps
@@ -590,7 +590,7 @@ fun Picker(onBack: () -> Unit, onNext: (List<AppInfo>) -> Unit) {
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(a.label, fontSize = 16.sp, color = if (done) C.Faint else C.Ink)
-                            if (done) Text("已在守护", fontSize = 12.sp, color = C.SageInk)
+                            if (done) Text(tr("已在守护"), fontSize = 12.sp, color = C.SageInk)
                         }
                         Box(
                             Modifier.size(24.dp).clip(CircleShape)
@@ -602,7 +602,7 @@ fun Picker(onBack: () -> Unit, onNext: (List<AppInfo>) -> Unit) {
                 }
             }
         }
-        PrimaryButton(if (sel.isEmpty()) "选几个应用吧" else "下一步：设置时长（${sel.size}）", Modifier.padding(vertical = 16.dp), enabled = sel.isNotEmpty()) {
+        PrimaryButton(if (sel.isEmpty()) tr("选几个应用吧") else tr("下一步：设置时长（{0}）", sel.size), Modifier.padding(vertical = 16.dp), enabled = sel.isNotEmpty()) {
             val all = apps ?: return@PrimaryButton
             onNext(all.filter { it.pkg in sel })
         }
@@ -614,9 +614,9 @@ fun Setup(apps: List<AppInfo>, onBack: () -> Unit, onDone: () -> Unit) {
     val c = LocalContext.current
     val mins = remember { mutableStateMapOf<String, Float>().apply { apps.forEach { put(it.pkg, 30f) } } }
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 22.dp)) {
-        Text("‹ 返回", fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
-        Text("每天给它们多久？", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text("保存后立刻生效。之后点首页的应用，可以改成限定时段、单次限时、打开前停一下等方式。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
+        Text(tr("‹ 返回"), fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).clip(RoundedCornerShape(10.dp)).clickable { onBack() }.padding(vertical = 4.dp))
+        Text(tr("每天给它们多久？"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
+        Text(tr("保存后立刻生效。之后点首页的应用，可以改成限定时段、单次限时、打开前停一下等方式。"), fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
         LazyColumn(Modifier.weight(1f).padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(apps, key = { it.pkg }) { a ->
                 SoftCard(Modifier.fillMaxWidth()) {
@@ -625,13 +625,13 @@ fun Setup(apps: List<AppInfo>, onBack: () -> Unit, onDone: () -> Unit) {
                         Spacer(Modifier.width(12.dp))
                         Text(a.label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink, modifier = Modifier.weight(1f))
                         Text("${mins[a.pkg]!!.toInt()}", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Clay)
-                        Text(" 分钟", fontSize = 14.sp, color = C.Soft)
+                        Text(tr(" 分钟"), fontSize = 14.sp, color = C.Soft)
                     }
                     MinuteSlider(mins[a.pkg]!!) { mins[a.pkg] = it }
                 }
             }
         }
-        PrimaryButton("开始守护", Modifier.padding(vertical = 16.dp)) {
+        PrimaryButton(tr("开始守护"), Modifier.padding(vertical = 16.dp)) {
             val d = Store.desired(c).toMutableMap()
             for (a in apps) d[a.pkg] = mins[a.pkg]!!.toInt()
             Store.setDesired(c, d)

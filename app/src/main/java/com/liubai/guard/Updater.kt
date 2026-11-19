@@ -88,7 +88,7 @@ object Updater {
             val rc = con.responseCode
             val loc = con.getHeaderField("Location") ?: ""
             val code = Regex("build-(\\d+)").find(loc)?.groupValues?.get(1)?.toIntOrNull()
-            if (rc in 300..399 && code != null) take(Release(code, "留白 1.$code", "", apk(code)), m)
+            if (rc in 300..399 && code != null) take(Release(code, tr("留白 1.{0}", code), "", apk(code)), m)
             if (rc == 404) priv = true
         }
         // 3) 发布的 atom 订阅，再兜底一次
@@ -97,7 +97,7 @@ object Updater {
             if (con.responseCode == 200) {
                 val txt = con.inputStream.bufferedReader().readText()
                 Regex("build-(\\d+)").findAll(txt).mapNotNull { it.groupValues[1].toIntOrNull() }.maxOrNull()
-                    ?.let { take(Release(it, "留白 1.$it", "", apk(it)), m) }
+                    ?.let { take(Release(it, tr("留白 1.{0}", it), "", apk(it)), m) }
             }
         }
         var left = jobs.size
@@ -232,25 +232,25 @@ fun AboutScreen() {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
-        Text("关于与更新", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("关于与更新"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Spacer(Modifier.height(18.dp))
         SoftCard(Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Sprout(72.dp, ring = true)
-                Text("留白", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 8.dp))
-                Text("版本 ${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
+                Text(tr("留白"), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 8.dp))
+                Text(tr("版本 {0}", BuildConfig.VERSION_NAME), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 4.dp))
             }
-            if (BuildConfig.PLAY) Text("在 Google Play 里更新", fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).align(Alignment.CenterHorizontally))
+            if (BuildConfig.PLAY) Text(tr("在 Google Play 里更新"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp).align(Alignment.CenterHorizontally))
             if (!BuildConfig.PLAY) {
             Spacer(Modifier.height(18.dp))
             val r = rel
             when (state) {
-                "checking" -> Text("正在看看有没有新版本…", fontSize = 14.sp, color = C.Soft)
-                "latest" -> Text("已经是最新版本啦", fontSize = 14.sp, color = C.SageInk)
-                "error" -> Text(if (Updater.lastError == "private") "仓库还没公开，暂时拿不到新版本" else "直连和镜像都没连上，换个网络再试试", fontSize = 14.sp, color = C.ClayDeep, lineHeight = 20.sp)
-                "noperm" -> Text("请允许留白「安装未知应用」，回来再点一次更新", fontSize = 14.sp, color = C.ClayDeep, lineHeight = 20.sp)
+                "checking" -> Text(tr("正在看看有没有新版本…"), fontSize = 14.sp, color = C.Soft)
+                "latest" -> Text(tr("已经是最新版本啦"), fontSize = 14.sp, color = C.SageInk)
+                "error" -> Text(if (Updater.lastError == "private") tr("仓库还没公开，暂时拿不到新版本") else tr("直连和镜像都没连上，换个网络再试试"), fontSize = 14.sp, color = C.ClayDeep, lineHeight = 20.sp)
+                "noperm" -> Text(tr("请允许留白「安装未知应用」，回来再点一次更新"), fontSize = 14.sp, color = C.ClayDeep, lineHeight = 20.sp)
                 "found", "downloading", "ready" -> if (r != null) {
-                    Text("发现新版本 ${r.name}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                    Text(tr("发现新版本 {0}", r.name), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
                     if (r.notes.isNotBlank()) Text(r.notes, fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 6.dp))
                 }
             }
@@ -260,22 +260,22 @@ fun AboutScreen() {
             }
             Spacer(Modifier.height(14.dp))
             when (state) {
-                "found", "noperm" -> PrimaryButton("下载并安装") { get() }
-                "downloading" -> PrimaryButton("下载中 ${(prog * 100).toInt()}%", enabled = false) {}
-                "ready" -> PrimaryButton("安装") { file?.let { Updater.install(c, it) } }
-                "checking" -> PrimaryButton("检查中…", enabled = false) {}
-                else -> PrimaryButton("检查更新") { check() }
+                "found", "noperm" -> PrimaryButton(tr("下载并安装")) { get() }
+                "downloading" -> PrimaryButton(tr("下载中 {0}%", (prog * 100).toInt()), enabled = false) {}
+                "ready" -> PrimaryButton(tr("安装")) { file?.let { Updater.install(c, it) } }
+                "checking" -> PrimaryButton(tr("检查中…"), enabled = false) {}
+                else -> PrimaryButton(tr("检查更新")) { check() }
             }
             }
         }
         Spacer(Modifier.height(14.dp))
         SoftCard(Modifier.fillMaxWidth()) {
-            Text("没拦住？", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-            Text("复制诊断信息发给开发者，能看出是哪一步没接上。只包含守护状态和最近的界面事件。", fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-            PrimaryButton("复制诊断信息") {
+            Text(tr("没拦住？"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+            Text(tr("复制诊断信息发给开发者，能看出是哪一步没接上。只包含守护状态和最近的界面事件。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+            PrimaryButton(tr("复制诊断信息")) {
                 val cm = c.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                cm.setPrimaryClip(android.content.ClipData.newPlainText("留白诊断", Diag.report(c)))
-                android.widget.Toast.makeText(c, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                cm.setPrimaryClip(android.content.ClipData.newPlainText(tr("留白诊断"), Diag.report(c)))
+                android.widget.Toast.makeText(c, tr("已复制"), android.widget.Toast.LENGTH_SHORT).show()
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -336,28 +336,28 @@ fun UpdatePrompt() {
     AlertDialog(
         onDismissRequest = { if (state != "downloading") rel = null },
         containerColor = C.Card,
-        title = { Text("发现新版本 ${r.name}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink) },
+        title = { Text(tr("发现新版本 {0}", r.name), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink) },
         text = {
             Column {
                 when (state) {
                     "downloading" -> {
-                        Text("下载中 ${(prog * 100).toInt()}%", fontSize = 14.sp, color = C.Soft)
+                        Text(tr("下载中 {0}%", (prog * 100).toInt()), fontSize = 14.sp, color = C.Soft)
                         LinearProgressIndicator(progress = prog, color = C.Clay, trackColor = C.Track,
                             modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(8.dp))
                     }
-                    "error" -> Text("下载没成功，换个网络再试试", fontSize = 14.sp, color = C.ClayDeep)
-                    "noperm" -> Text("请允许留白「安装未知应用」，回来再点更新", fontSize = 14.sp, color = C.ClayDeep)
-                    else -> Text(if (r.notes.isNotBlank()) r.notes else "守护设置更新后都会保留。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp)
+                    "error" -> Text(tr("下载没成功，换个网络再试试"), fontSize = 14.sp, color = C.ClayDeep)
+                    "noperm" -> Text(tr("请允许留白「安装未知应用」，回来再点更新"), fontSize = 14.sp, color = C.ClayDeep)
+                    else -> Text(if (r.notes.isNotBlank()) r.notes else tr("守护设置更新后都会保留。"), fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp)
                 }
             }
         },
         confirmButton = {
             if (state != "downloading") TextButton(onClick = { go() }) {
-                Text(if (state == "error") "重试" else "更新", color = C.Clay, fontWeight = FontWeight.SemiBold)
+                Text(if (state == "error") tr("重试") else tr("更新"), color = C.Clay, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
-            if (state != "downloading") TextButton(onClick = { later() }) { Text("以后再说", color = C.Soft) }
+            if (state != "downloading") TextButton(onClick = { later() }) { Text(tr("以后再说"), color = C.Soft) }
         }
     )
 }

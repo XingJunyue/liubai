@@ -41,32 +41,32 @@ class BlockActivity : ComponentActivity() {
         val x = Store.extraActive(this, pkg)
         val bed = Store.bedActive(this)
         val (title, sub) = when {
-            why == "scholar" -> "无敌模式" to "专注还剩 ${(Focus.leftMs(this) / 60_000L + 1)} 分钟，这会儿只开放白名单里的应用"
-            why == "focus" -> "正在专注" to "这个番茄还剩 ${(Focus.leftMs(this) / 60_000L + 1)} 分钟，先把手上的事做完"
-            why == "bed" -> "该睡觉啦" to "睡前锁定到 ${Rules.clock(bed.to)}，$name 明早再见"
+            why == "scholar" -> tr("无敌模式") to tr("专注还剩 {0} 分钟，这会儿只开放白名单里的应用", (Focus.leftMs(this) / 60_000L + 1))
+            why == "focus" -> tr("正在专注") to tr("这个番茄还剩 {0} 分钟，先把手上的事做完", (Focus.leftMs(this) / 60_000L + 1))
+            why == "bed" -> tr("该睡觉啦") to tr("睡前锁定到 {0}，{1} 明早再见", Rules.clock(bed.to), name)
             why == "class" || why == "scene" -> {
                 val s = Scenes.now(this)
-                (if (why == "class") "正在上课" else "${s?.name ?: "这段时间"}") to "${s?.name ?: ""} ${Rules.clock(s?.to ?: 0)} 结束，$name 到时候再见".trim()
+                (if (why == "class") tr("正在上课") else "${s?.name ?: tr("这段时间")}") to tr("{0} {1} 结束，{2} 到时候再见", s?.name ?: "", Rules.clock(s?.to ?: 0), name).trim()
             }
-            why == "opens" -> "今天打开${name}的次数用完啦" to "一共 ${x.opens} 次，明天 0:00 再见"
-            why == "hard" -> "${name}今天不开放" to "这是你给自己定的，明天 0:00 才能改回来"
-            why == "window" -> "现在不是${name}的时间" to "它只在 ${Rules.clock(x.from)}–${Rules.clock(x.to)} 开放"
+            why == "opens" -> tr("今天打开{0}的次数用完啦", name) to tr("一共 {0} 次，明天 0:00 再见", x.opens)
+            why == "hard" -> tr("{0}今天不开放", name) to tr("这是你给自己定的，明天 0:00 才能改回来")
+            why == "window" -> tr("现在不是{0}的时间", name) to tr("它只在 {0}–{1} 开放", Rules.clock(x.from), Rules.clock(x.to))
             why == "cool" -> {
                 val m = ((Store.coolUntil(this, pkg) - System.currentTimeMillis()) / 60_000L + 1).coerceAtLeast(1)
-                "这一轮刷够啦" to "单次 ${x.session} 分钟已满，歇 $m 分钟再来"
+                tr("这一轮刷够啦") to tr("单次 {0} 分钟已满，歇 {1} 分钟再来", x.session, m)
             }
             why.startsWith("group:") -> {
                 val g = Store.groupsActive(this).firstOrNull { it.id == why.removePrefix("group:") }
-                "「${g?.name ?: "分组"}」今天的时间用完啦" to "明天 0:00 再见 · 还有 ${Stats.untilMidnight()}"
+                tr("「{0}」今天的时间用完啦", g?.name ?: tr("分组")) to tr("明天 0:00 再见 · 还有 {0}", Stats.untilMidnight())
             }
-            else -> "今天的${name}时间用完啦" to "明天 0:00 再见 · 还有 ${Stats.untilMidnight()}"
+            else -> tr("今天的{0}时间用完啦", name) to tr("明天 0:00 再见 · 还有 {0}", Stats.untilMidnight())
         }
         val tips = listOf(
-            Color(0xFFFBE3D7) to "去倒杯温水",
-            Color(0xFFEAF2EC) to "站起来伸个懒腰",
-            Color(0xFFEFE7F6) to "看看窗外，让眼睛歇一会儿",
-            Color(0xFFFFF1D6) to "给想念的人发条消息",
-            Color(0xFFE6EEF6) to "早点睡，明天的你会感谢现在的你"
+            Color(0xFFFBE3D7) to tr("去倒杯温水"),
+            Color(0xFFEAF2EC) to tr("站起来伸个懒腰"),
+            Color(0xFFEFE7F6) to tr("看看窗外，让眼睛歇一会儿"),
+            Color(0xFFFFF1D6) to tr("给想念的人发条消息"),
+            Color(0xFFE6EEF6) to tr("早点睡，明天的你会感谢现在的你")
         ).shuffled().take(3)
         setContent {
             LiubaiTheme {
@@ -104,12 +104,12 @@ class BlockActivity : ComponentActivity() {
                             packageManager.getLaunchIntentForPackage(Virt.real(pkg))?.let { try { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) {} }
                         }
                         if (canSos) Text(
-                            when { sos > 0 -> "$sos 秒后放行 5 分钟…"; left > 0 -> "有急事？紧急用 5 分钟 · 本周剩 $left 次"; else -> "本周的紧急次数用完了" },
+                            when { sos > 0 -> tr("{0} 秒后放行 5 分钟…", sos); left > 0 -> tr("有急事？紧急用 5 分钟 · 本周剩 {0} 次", left); else -> tr("本周的紧急次数用完了") },
                             fontSize = 13.sp, color = C.Faint, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(bottom = 10.dp).clip(RoundedCornerShape(12.dp))
                                 .clickable(enabled = left > 0 && sos < 0) { sos = 20 }.padding(horizontal = 14.dp, vertical = 8.dp)
                         )
-                        PrimaryButton(if (why == "focus" || why == "scholar" || (why == "class" && Focus.phase(this@BlockActivity) == Focus.WORK)) "回到专注" else "回到桌面", Modifier.padding(bottom = 24.dp)) { home() }
+                        PrimaryButton(if (why == "focus" || why == "scholar" || (why == "class" && Focus.phase(this@BlockActivity) == Focus.WORK)) tr("回到专注") else tr("回到桌面"), Modifier.padding(bottom = 24.dp)) { home() }
                     }
                 }
             }

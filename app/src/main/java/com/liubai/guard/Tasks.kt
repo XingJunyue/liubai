@@ -37,7 +37,7 @@ data class Plan(val id: String, val days: Set<Int>, val at: Int, val on: Boolean
 object Tasks {
     private fun p(c: Context) = c.getSharedPreferences("tasks", Context.MODE_PRIVATE)
 
-    fun tags(c: Context): List<String> = (p(c).getString("tags", null) ?: "学习,工作,阅读").split(',').filter { it.isNotBlank() }
+    fun tags(c: Context): List<String> = (p(c).getString("tags", null) ?: tr("学习,工作,阅读")).split(',').filter { it.isNotBlank() }
     fun setTags(c: Context, l: List<String>) = p(c).edit().putString("tags", l.joinToString(",") { it.replace(",", " ") }).apply()
 
     fun todos(c: Context): List<Todo> {
@@ -50,7 +50,7 @@ object Tasks {
     }
 
     /** 当前在专注什么：标签 + 可选的待办。 */
-    fun curTag(c: Context) = p(c).getString("cur", null) ?: tags(c).firstOrNull() ?: "学习"
+    fun curTag(c: Context) = p(c).getString("cur", null) ?: tags(c).firstOrNull() ?: tr("学习")
     fun curTodo(c: Context) = p(c).getString("curTodo", "") ?: ""
     fun setCur(c: Context, tag: String, todo: String = "") = p(c).edit().putString("cur", tag).putString("curTodo", todo).apply()
 
@@ -89,7 +89,7 @@ object Tasks {
     }
 }
 
-val DAY_NAMES = listOf("一", "二", "三", "四", "五", "六", "日")
+val DAY_NAMES get() = (1..7).map { dayShort(it) }
 
 /** 专注页上的一个小标签：现在在专注什么。点开选标签、待办。 */
 @Composable
@@ -126,7 +126,7 @@ fun TaskSheet(onClose: () -> Unit) {
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = C.Card) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Text("这次专注做什么", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+            Text(tr("这次专注做什么"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
             FlowRowLite {
                 for (t in tags) {
                     val on = t == tag
@@ -135,7 +135,7 @@ fun TaskSheet(onClose: () -> Unit) {
                             .background(if (on) C.Clay else C.Sand).clickable { pick(t) }.padding(horizontal = 14.dp, vertical = 7.dp))
                 }
                 Box(Modifier.padding(top = 10.dp).clip(RoundedCornerShape(14.dp)).background(C.Sand).padding(horizontal = 12.dp, vertical = 7.dp)) {
-                    if (newTag.isEmpty()) Text("＋ 标签", fontSize = 13.sp, color = C.Faint)
+                    if (newTag.isEmpty()) Text(tr("＋ 标签"), fontSize = 13.sp, color = C.Faint)
                     BasicTextField(newTag, { newTag = it.take(6) }, singleLine = true, textStyle = TextStyle(fontSize = 13.sp, color = C.Ink),
                         modifier = Modifier.width(64.dp),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
@@ -145,15 +145,15 @@ fun TaskSheet(onClose: () -> Unit) {
                 }
             }
             val mins = remember { Tasks.tagToday(c) }
-            if (mins.isNotEmpty()) Text("今天：" + mins.joinToString("，") { "${it.first} ${it.second} 分钟" }, fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 10.dp))
+            if (mins.isNotEmpty()) Text(tr("今天：") + mins.joinToString(if (Tr.cjk) "，" else ", ") { tr("{0} {1} 分钟", it.first, it.second) }, fontSize = 12.sp, color = C.Soft, modifier = Modifier.padding(top = 10.dp))
 
-            Text("待办", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 20.dp, bottom = 6.dp))
+            Text(tr("待办"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 20.dp, bottom = 6.dp))
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Sand).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
-                    if (input.isEmpty()) Text("写一件要做的事", fontSize = 14.sp, color = C.Faint)
+                    if (input.isEmpty()) Text(tr("写一件要做的事"), fontSize = 14.sp, color = C.Faint)
                     BasicTextField(input, { input = it.take(30) }, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth())
                 }
-                Text("添加", fontSize = 14.sp, color = if (input.isBlank()) C.Faint else C.ClayDeep, fontWeight = FontWeight.SemiBold,
+                Text(tr("添加"), fontSize = 14.sp, color = if (input.isBlank()) C.Faint else C.ClayDeep, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(enabled = input.isNotBlank()) {
                         todos = listOf(Todo("t" + System.currentTimeMillis(), input.trim(), tag)) + todos; Tasks.setTodos(c, todos); input = ""
                     }.padding(horizontal = 6.dp, vertical = 2.dp))
@@ -176,10 +176,10 @@ fun TaskSheet(onClose: () -> Unit) {
                     Text("  ×", fontSize = 14.sp, color = C.Faint, modifier = Modifier.clickable { todos = todos.filter { it.id != td.id }; Tasks.setTodos(c, todos) })
                 }
             }
-            if (todos.any { it.done }) Text("清掉已完成", fontSize = 13.sp, color = C.Soft,
+            if (todos.any { it.done }) Text(tr("清掉已完成"), fontSize = 13.sp, color = C.Soft,
                 modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).clickable { todos = todos.filter { !it.done }; Tasks.setTodos(c, todos) }.padding(vertical = 6.dp))
             Spacer(Modifier.height(10.dp))
-            PrimaryButton("好了") { onClose() }
+            PrimaryButton(tr("好了")) { onClose() }
         }
     }
 }
@@ -190,20 +190,20 @@ fun PlanEditor() {
     val c = LocalContext.current
     var plans by remember { mutableStateOf(Tasks.plans(c)) }
     fun save(l: List<Plan>) { plans = l; Tasks.setPlans(c, l) }
-    Text("预约番茄", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
-    Text("到点自动开始专注，留白会提醒你", fontSize = 12.sp, color = C.Faint)
+    Text(tr("预约番茄"), fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
+    Text(tr("到点自动开始专注，留白会提醒你"), fontSize = 12.sp, color = C.Faint)
     for (pl in plans) {
         Column(Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Sand).padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(Rules.clock(pl.at), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = if (pl.on) C.Clay else C.Faint, modifier = Modifier.weight(1f))
                 Text("−", fontSize = 20.sp, color = C.Soft, modifier = Modifier.clip(CircleShape).clickable { save(plans.map { if (it.id == pl.id) it.copy(at = (it.at - 15 + 1440) % 1440) else it }) }.padding(horizontal = 10.dp))
                 Text("+", fontSize = 20.sp, color = C.Soft, modifier = Modifier.clip(CircleShape).clickable { save(plans.map { if (it.id == pl.id) it.copy(at = (it.at + 15) % 1440) else it }) }.padding(horizontal = 10.dp))
-                Text("删除", fontSize = 13.sp, color = C.Faint, modifier = Modifier.clickable { save(plans.filter { it.id != pl.id }) }.padding(start = 8.dp))
+                Text(tr("删除"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.clickable { save(plans.filter { it.id != pl.id }) }.padding(start = 8.dp))
             }
             DayPicker(pl.days) { d -> save(plans.map { if (it.id == pl.id) it.copy(days = d) else it }) }
         }
     }
-    Text("＋ 添加预约", fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
+    Text(tr("＋ 添加预约"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).clickable {
             save(plans + Plan("p" + System.currentTimeMillis(), setOf(1, 2, 3, 4, 5), 20 * 60))
         }.padding(vertical = 6.dp))

@@ -86,7 +86,7 @@ fun FreeMinutes(label: String, value: Int, onChange: (Int) -> Unit) {
             modifier = Modifier.width(76.dp).clip(RoundedCornerShape(12.dp)).background(C.ClayPale).padding(vertical = 6.dp)
         )
         Text("+", fontSize = 22.sp, color = C.Clay, modifier = Modifier.clip(CircleShape).clickable { onChange(value + 1) }.padding(horizontal = 14.dp, vertical = 4.dp))
-        Text("分钟", fontSize = 13.sp, color = C.Soft)
+        Text(tr("分钟"), fontSize = 13.sp, color = C.Soft)
     }
 }
 
@@ -115,41 +115,41 @@ fun Toggle(label: String, sub: String, on: Boolean, onChange: (Boolean) -> Unit)
 /** 每日额度那块的全部模式。返回值通过 onChange 回传。 */
 @Composable
 fun ModeEditor(x: Extra, onChange: (Extra) -> Unit) {
-    SectionTitle("守护方式", "都会同时受上面的每日额度约束，「完全不开」除外")
+    SectionTitle(tr("守护方式"), tr("都会同时受上面的每日额度约束，「完全不开」除外"))
     Segments(Extra.MODES, x.mode) { onChange(x.copy(mode = it)) }
     when (x.mode) {
-        0 -> Note("一天累计用满就休息，最简单。")
+        0 -> Note(tr("一天累计用满就休息，最简单。"))
         1 -> {
-            StepSlider("从", x.from, 0..(23 * 60 + 30), 30, "", { Rules.clock(it) }) { onChange(x.copy(from = it, to = maxOf(x.to, it + 30))) }
-            StepSlider("到", x.to, 30..(24 * 60), 30, "", { if (it == 1440) "24:00" else Rules.clock(it) }) { onChange(x.copy(to = it, from = minOf(x.from, it - 30))) }
-            Note("只在 ${Rules.clock(x.from)}–${if (x.to == 1440) "24:00" else Rules.clock(x.to)} 开放，其他时间打开会直接回桌面。")
+            StepSlider(tr("从"), x.from, 0..(23 * 60 + 30), 30, "", { Rules.clock(it) }) { onChange(x.copy(from = it, to = maxOf(x.to, it + 30))) }
+            StepSlider(tr("到"), x.to, 30..(24 * 60), 30, "", { if (it == 1440) "24:00" else Rules.clock(it) }) { onChange(x.copy(to = it, from = minOf(x.from, it - 30))) }
+            Note(tr("只在 {0}–{1} 开放，其他时间打开会直接回桌面。", Rules.clock(x.from), if (x.to == 1440) "24:00" else Rules.clock(x.to)))
         }
         2 -> {
-            StepSlider("每次最多", x.session, 5..60, 5, "分钟") { onChange(x.copy(session = it)) }
-            StepSlider("用满后歇", x.cool, 5..120, 5, "分钟") { onChange(x.copy(cool = it)) }
-            Note("连续刷 ${x.session} 分钟就停，歇 ${x.cool} 分钟再开。中途离开超过 1 分钟算新的一次。")
+            StepSlider(tr("每次最多"), x.session, 5..60, 5, tr("分钟")) { onChange(x.copy(session = it)) }
+            StepSlider(tr("用满后歇"), x.cool, 5..120, 5, tr("分钟")) { onChange(x.copy(cool = it)) }
+            Note(tr("连续刷 {0} 分钟就停，歇 {1} 分钟再开。中途离开超过 1 分钟算新的一次。", x.session, x.cool))
         }
-        3 -> Note("今天起完全不开放。想改回来要等明天 0:00。", warm = true)
+        3 -> Note(tr("今天起完全不开放。想改回来要等明天 0:00。"), warm = true)
     }
-    SectionTitle("打开前停一下", "打开前先跟着呼吸几秒，打断「手比脑子快」")
-    Segments(listOf("不停", "5 秒", "15 秒", "30 秒"), listOf(0, 5, 15, 30).indexOf(x.delay).coerceAtLeast(0)) {
+    SectionTitle(tr("打开前停一下"), tr("打开前先跟着呼吸几秒，打断「手比脑子快」"))
+    Segments(listOf(tr("不停"), tr("5 秒"), tr("15 秒"), tr("30 秒")), listOf(0, 5, 15, 30).indexOf(x.delay).coerceAtLeast(0)) {
         onChange(x.copy(delay = listOf(0, 5, 15, 30)[it]))
     }
-    Toggle("剩 5 分钟提醒", "快用完时轻轻提醒一下，别被突然弹走", x.warn) { onChange(x.copy(warn = it)) }
+    Toggle(tr("剩 5 分钟提醒"), tr("快用完时轻轻提醒一下，别被突然弹走"), x.warn) { onChange(x.copy(warn = it)) }
     var more by remember { mutableStateOf(x.grow || x.opens > 0 || x.ask || x.again > 0) }
     Text(
-        if (more) "收起" else "更多方式", fontSize = 13.sp, color = C.Soft,
+        if (more) tr("收起") else tr("更多方式"), fontSize = 13.sp, color = C.Soft,
         modifier = Modifier.padding(top = 12.dp).clip(RoundedCornerShape(10.dp)).clickable { more = !more }.padding(vertical = 6.dp)
     )
     if (more) {
-        Toggle("越开越慢", "今天每打开一次，多停 5 秒，最多 60 秒", x.grow) { onChange(x.copy(grow = it, delay = if (it && x.delay == 0) 5 else x.delay)) }
-        SectionTitle("每天最多打开几次", "到了次数今天就不再开放")
-        Segments(listOf("不限", "3 次", "5 次", "10 次", "20 次"), listOf(0, 3, 5, 10, 20).indexOf(x.opens).coerceAtLeast(0)) {
+        Toggle(tr("越开越慢"), tr("今天每打开一次，多停 5 秒，最多 60 秒"), x.grow) { onChange(x.copy(grow = it, delay = if (it && x.delay == 0) 5 else x.delay)) }
+        SectionTitle(tr("每天最多打开几次"), tr("到了次数今天就不再开放"))
+        Segments(listOf(tr("不限"), tr("3 次"), tr("5 次"), tr("10 次"), tr("20 次")), listOf(0, 3, 5, 10, 20).indexOf(x.opens).coerceAtLeast(0)) {
             onChange(x.copy(opens = listOf(0, 3, 5, 10, 20)[it]))
         }
-        Toggle("打开前问一句", "「现在想做什么」，选完再进去", x.ask) { onChange(x.copy(ask = it)) }
-        SectionTitle("刷久了再问一次", "连续用满这么久，轻轻问一句还要不要继续")
-        Segments(listOf("不问", "5 分", "10 分", "20 分"), listOf(0, 5, 10, 20).indexOf(x.again).coerceAtLeast(0)) {
+        Toggle(tr("打开前问一句"), tr("「现在想做什么」，选完再进去"), x.ask) { onChange(x.copy(ask = it)) }
+        SectionTitle(tr("刷久了再问一次"), tr("连续用满这么久，轻轻问一句还要不要继续"))
+        Segments(listOf(tr("不问"), tr("5 分"), tr("10 分"), tr("20 分")), listOf(0, 5, 10, 20).indexOf(x.again).coerceAtLeast(0)) {
             onChange(x.copy(again = listOf(0, 5, 10, 20)[it]))
         }
     }
@@ -169,13 +169,13 @@ fun GroupsScreen() {
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
             Spacer(Modifier.height(8.dp))
-            Text("分组额度", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-            Text("几个应用共用一份时间，比如抖音、快手、小红书一天一共 1 小时。", fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
+            Text(tr("分组额度"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+            Text(tr("几个应用共用一份时间，比如抖音、快手、小红书一天一共 1 小时。"), fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(16.dp))
             if (active.isEmpty()) {
                 SoftCard(Modifier.fillMaxWidth()) {
-                    Text("还没有分组", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
-                    Text("把同一类应用放一起，换着刷也逃不掉。", fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 6.dp))
+                    Text(tr("还没有分组"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                    Text(tr("把同一类应用放一起，换着刷也逃不掉。"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 6.dp))
                 }
             }
             for (g in active) {
@@ -184,7 +184,7 @@ fun GroupsScreen() {
                 SoftCard(Modifier.fillMaxWidth().padding(bottom = 12.dp).clickable { editing = d ?: g }) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(g.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink, modifier = Modifier.weight(1f))
-                        Text("${usedMin.coerceAtMost(g.min)} / ${g.min} 分钟", fontSize = 13.sp, color = C.Soft)
+                        Text(tr("{0} / {1} 分钟", usedMin.coerceAtMost(g.min), g.min), fontSize = 13.sp, color = C.Soft)
                     }
                     Row(Modifier.padding(top = 10.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         for (p in g.pkgs.take(7)) AppIcon(Apps.info(c, p), 30.dp)
@@ -192,8 +192,8 @@ fun GroupsScreen() {
                     }
                     SoftBar(if (g.min <= 0) 1f else usedMin.toFloat() / g.min, usedMin >= g.min)
                     when {
-                        d == null -> Chip("明天起解散", warm = true)
-                        d.min != g.min -> Chip("明天起 ${d.min} 分钟", warm = true)
+                        d == null -> Chip(tr("明天起解散"), warm = true)
+                        d.min != g.min -> Chip(tr("明天起 {0} 分钟", d.min), warm = true)
                     }
                 }
             }
@@ -202,9 +202,9 @@ fun GroupsScreen() {
         Box(
             Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(22.dp)
                 .clip(RoundedCornerShape(22.dp)).background(C.Clay)
-                .clickable { editing = Group("g" + System.currentTimeMillis(), "短视频", emptyList(), 60) }
+                .clickable { editing = Group("g" + System.currentTimeMillis(), tr("短视频"), emptyList(), 60) }
                 .padding(horizontal = 22.dp, vertical = 15.dp)
-        ) { Text("＋ 新建分组", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+        ) { Text(tr("＋ 新建分组"), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
     }
     editing?.let { g -> GroupSheet(g) { editing = null; tick++ } }
 }
@@ -224,13 +224,13 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
 
     ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = C.Card) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
-            Text(if (isNew) "新建分组" else "编辑分组", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+            Text(if (isNew) tr("新建分组") else tr("编辑分组"), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = C.Ink)
             Box(Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Sand).padding(horizontal = 14.dp, vertical = 12.dp)) {
-                if (name.isEmpty()) Text("分组名字", fontSize = 14.sp, color = C.Faint)
+                if (name.isEmpty()) Text(tr("分组名字"), fontSize = 14.sp, color = C.Faint)
                 BasicTextField(name, { name = it.take(12) }, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth())
             }
-            StepSlider("一天一共", min, 5..240, 5, "分钟") { min = it }
-            Text("选应用（已选 ${sel.size}）", fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+            StepSlider(tr("一天一共"), min, 5..240, 5, tr("分钟")) { min = it }
+            Text(tr("选应用（已选 {0}）", sel.size), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
             val list = apps
             Box(Modifier.fillMaxWidth().height(260.dp)) {
                 if (list == null) CircularProgressIndicator(color = C.Clay, modifier = Modifier.align(Alignment.Center))
@@ -256,19 +256,19 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
             val t = todayMin
             Note(
                 when {
-                    t == null -> "保存后立刻生效。"
-                    min < t -> "调低马上生效，今天就按 $min 分钟。"
-                    min > t -> "调高要等明天 0:00，今天仍按 $t 分钟。"
-                    else -> "加应用马上生效；移出应用、解散要等明天 0:00。"
+                    t == null -> tr("保存后立刻生效。")
+                    min < t -> tr("调低马上生效，今天就按 {0} 分钟。", min)
+                    min > t -> tr("调高要等明天 0:00，今天仍按 {0} 分钟。", t)
+                    else -> tr("加应用马上生效；移出应用、解散要等明天 0:00。")
                 }
             )
             Spacer(Modifier.height(14.dp))
-            PrimaryButton("保存", enabled = sel.isNotEmpty() && name.isNotBlank()) {
+            PrimaryButton(tr("保存"), enabled = sel.isNotEmpty() && name.isNotBlank()) {
                 val d = Store.groupsDesired(c).filter { it.id != start.id } + Group(start.id, name.trim(), sel.toList(), min)
                 Store.setGroupsDesired(c, d); Widgets.updateAll(c); onClose()
             }
             if (!isNew) Text(
-                "解散这个分组（明天生效）", color = C.Soft, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                tr("解散这个分组（明天生效）"), color = C.Soft, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable {
                     Store.setGroupsDesired(c, Store.groupsDesired(c).filter { it.id != start.id }); onClose()
                 }.padding(horizontal = 16.dp, vertical = 12.dp)
@@ -283,7 +283,7 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
 fun BedScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
-        Text("睡前锁定", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("睡前锁定"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Spacer(Modifier.height(16.dp))
         BedCard()
     }
@@ -300,21 +300,21 @@ fun BedCard() {
     val startVal = if (want.from < 12 * 60) want.from + 1440 else want.from
 
     Column {
-        Text("到点后，所有守护中的应用和分组都不开放，第二天早上自动恢复。", fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
+        Text(tr("到点后，所有守护中的应用和分组都不开放，第二天早上自动恢复。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
         SoftCard(Modifier.fillMaxWidth()) {
-            Toggle("开启睡前锁定", if (today.value.on) "今天在执行：${Rules.clock(today.value.from)}–${Rules.clock(today.value.to)}" else "今天还没开启", want.on) {
+            Toggle(tr("开启睡前锁定"), if (today.value.on) tr("今天在执行：{0}–{1}", Rules.clock(today.value.from), Rules.clock(today.value.to)) else tr("今天还没开启"), want.on) {
                 want = want.copy(on = it); saved = null
             }
             if (want.on) {
-                StepSlider("几点开始", startVal, 20 * 60..26 * 60, 15, "", { Rules.clock(it) }) { want = want.copy(from = it % 1440); saved = null }
-                StepSlider("几点结束", want.to, 5 * 60..10 * 60, 15, "", { Rules.clock(it) }) { want = want.copy(to = it); saved = null }
+                StepSlider(tr("几点开始"), startVal, 20 * 60..26 * 60, 15, "", { Rules.clock(it) }) { want = want.copy(from = it % 1440); saved = null }
+                StepSlider(tr("几点结束"), want.to, 5 * 60..10 * 60, 15, "", { Rules.clock(it) }) { want = want.copy(to = it); saved = null }
             }
-            Note("今天只能更严：开启、提前开始、推迟结束立刻生效；关闭、缩短要等明天 0:00。")
+            Note(tr("今天只能更严：开启、提前开始、推迟结束立刻生效；关闭、缩短要等明天 0:00。"))
             Spacer(Modifier.height(14.dp))
-            PrimaryButton("保存") {
+            PrimaryButton(tr("保存")) {
                 val eff = Store.setBed(c, want)
                 today.value = eff
-                saved = if (eff == want) "已生效" else "已保存，放宽的部分明天 0:00 生效"
+                saved = if (eff == want) tr("已生效") else tr("已保存，放宽的部分明天 0:00 生效")
                 Widgets.updateAll(c)
             }
             saved?.let { Text(it, fontSize = 13.sp, color = C.SageInk, modifier = Modifier.padding(top = 10.dp).align(Alignment.CenterHorizontally)) }

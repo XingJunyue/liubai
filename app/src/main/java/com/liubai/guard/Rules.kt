@@ -30,7 +30,7 @@ data class Extra(
         .put("g", grow).put("o", opens).put("a", ask).put("ag", again)
 
     companion object {
-        val MODES = listOf("每日总量", "限定时段", "单次限时", "完全不开")
+        val MODES = listOf(tr("每日总量"), tr("限定时段"), tr("单次限时"), tr("完全不开"))
         fun of(j: JSONObject) = Extra(
             j.optInt("m", 0), j.optInt("f", 540), j.optInt("t", 1260),
             j.optInt("s", 15), j.optInt("c", 30), j.optInt("d", 0), j.optBoolean("w", true),
@@ -109,13 +109,13 @@ object Rules {
     fun summary(x: Extra): List<String> {
         val out = ArrayList<String>()
         when (x.mode) {
-            1 -> out += "${clock(x.from)}–${clock(x.to)} 开放"
-            2 -> out += "单次 ${x.session} 分 · 歇 ${x.cool} 分"
-            3 -> out += "完全不开"
+            1 -> out += tr("{0}–{1} 开放", clock(x.from), clock(x.to))
+            2 -> out += tr("单次 {0} 分 · 歇 {1} 分", x.session, x.cool)
+            3 -> out += tr("完全不开")
         }
-        if (x.delay > 0) out += "打开前停 ${x.delay} 秒" + if (x.grow) "起" else ""
-        if (x.opens > 0) out += "每天 ${x.opens} 次"
-        if (x.ask) out += "先问一句"
+        if (x.delay > 0) out += tr("打开前停 {0} 秒", x.delay) + if (x.grow) tr("起") else ""
+        if (x.opens > 0) out += tr("每天 {0} 次", x.opens)
+        if (x.ask) out += tr("先问一句")
         return out
     }
 }

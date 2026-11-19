@@ -59,6 +59,53 @@ class LogicTest {
         assertEquals(setOf(4), r["程序设计"]!!.days)
     }
 
+    @Test fun ocrEnglish() {
+        val g = ArrayList<Ocr.L>()
+        listOf("Mon", "Tue", "Wed", "Thu", "Fri").forEachIndexed { i, d -> g += l(d, 200 + i * 120, 40) }
+        for (n in 1..12) g += l("$n", 60, 100 + (n - 1) * 60 + 18, 30)
+        g += l("Linear", 200, 104); g += l("Algebra", 200, 132); g += l("Room 204", 200, 160)
+        g += l("Physics", 440, 224); g += l("Prof. Smith", 440, 252)
+        val r = Ocr.parse(g, 1000, ::sec).associateBy { it.name }
+        assertEquals(setOf("Linear Algebra", "Physics"), r.keys)
+        assertEquals(setOf(1), r["Linear Algebra"]!!.days); assertEquals(480, r["Linear Algebra"]!!.from)
+        assertEquals(setOf(3), r["Physics"]!!.days); assertEquals(600, r["Physics"]!!.from)
+    }
+
+    @Test fun ocrGermanFrenchSpanish() {
+        for (heads in listOf(listOf("Mo", "Di", "Mi", "Do", "Fr"), listOf("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"), listOf("Lun.", "Mar.", "Mié.", "Jue.", "Vie."))) {
+            val g = ArrayList<Ocr.L>()
+            heads.forEachIndexed { i, d -> g += l(d, 200 + i * 120, 40) }
+            for (n in 1..12) g += l("$n.", 60, 100 + (n - 1) * 60 + 18, 30)
+            g += l("Mathematik", 680, 224)
+            val r = Ocr.parse(g, 1000, ::sec)
+            assertEquals(heads.toString(), 1, r.size); assertEquals(setOf(5), r[0].days); assertEquals(600, r[0].from)
+        }
+    }
+
+    @Test fun ocrJapaneseKorean() {
+        for ((heads, unit) in listOf(listOf("月", "火", "水", "木", "金") to "限", listOf("월", "화", "수", "목", "금") to "교시")) {
+            val g = ArrayList<Ocr.L>()
+            heads.forEachIndexed { i, d -> g += l(d, 200 + i * 120, 40) }
+            for (n in 1..12) g += l("$n$unit", 60, 100 + (n - 1) * 60 + 18, 30)
+            g += l("線形代数", 320, 344); g += l("講義室3", 320, 372)
+            val r = Ocr.parse(g, 1000, ::sec)
+            assertEquals(1, r.size); assertEquals("線形代数", r[0].name); assertEquals(setOf(2), r[0].days); assertEquals(840, r[0].from)
+        }
+    }
+
+    @Test fun ocrSplitsWideLines() {
+        val g = ArrayList<Ocr.L>()
+        // 表头被认成一整行
+        val hs = listOf("周一", "周二", "周三", "周四", "周五").mapIndexed { i, d -> l(d, 200 + i * 120, 40) }
+        g += Ocr.L("周一 周二 周三 周四 周五", Ocr.R(160, 40, 720, 64), hs)
+        for (n in 1..12) g += l("$n", 60, 100 + (n - 1) * 60 + 18, 30)
+        // 周一、周二两格的字连成了一行
+        val p = listOf(l("高等数学", 200, 104), l("大学物理", 320, 104))
+        g += Ocr.L("高等数学 大学物理", Ocr.R(160, 104, 360, 128), p)
+        val r = Ocr.parse(g, 1000, ::sec).associateBy { it.name }
+        assertEquals(setOf(1), r["高等数学"]!!.days); assertEquals(setOf(2), r["大学物理"]!!.days)
+    }
+
     @Test(expected = IllegalStateException::class) fun ocrNoHeader() {
         Ocr.parse(listOf(l("随便一张图", 100, 100)), 500, ::sec)
     }
