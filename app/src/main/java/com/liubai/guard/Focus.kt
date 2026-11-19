@@ -50,6 +50,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import kotlinx.coroutines.delay
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 
 /** 番茄钟：状态全在 SharedPreferences 里，关掉应用也照样走；守护服务负责到点提醒。 */
 object Focus {
@@ -298,9 +300,50 @@ fun FocusScreen(onBack: () -> Unit = {}) {
             }
         }
 
-        // 主环：细线、圆头，中间大号细体数字
-        Box(Modifier.padding(top = 26.dp).size(272.dp), contentAlignment = Alignment.Center) {
+        // 主环：细线、圆头，中间大号细体数字。空闲时它是转盘：沿着圆环拖动设定时长，一圈 60 分钟，可多转几圈
+        val idle = phase == Focus.IDLE
+        var dialMin by remember(shown, idle) { mutableStateOf(Focus.len(c, shown)) }
+        val haptic = LocalHapticFeedback.current
+        val ringFrac = if (idle) { if (dialMin % 60 == 0) 1f else (dialMin % 60) / 60f } else frac
+        Box(Modifier.padding(top = 26.dp).size(272.dp).pointerInput(idle, shown) {
+            if (!idle) return@pointerInput
+            fun ang(o: Offset): Double {
+                val a = Math.toDegrees(Math.atan2((o.y - size.height / 2f).toDouble(), (o.x - size.width / 2f).toDouble())) + 90.0
+                return if (a < 0) a + 360.0 else a
+            }
+            var last = 0.0
+            var acc = 0.0
+            detectDragGestures(
+                onDragStart = { o -> last = ang(o); acc = dialMin * 6.0 },
+                onDrag = { ch, _ ->
+                    ch.consume()
+                    val a = ang(ch.position)
+                    var d = a - last
+                    if (d > 180) d -= 360.0
+                    if (d < -180) d += 360.0
+                    last = a
+                    acc = (acc + d).coerceIn(6.0, 240 * 6.0)
+                    val m = Math.round(acc / 6.0).toInt().coerceIn(1, 240)
+                    if (m != dialMin) {
+                        dialMin = m; Focus.setLen(c, shown, m)
+                        if (m % 5 == 0) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                }
+            )
+        }, contentAlignment = Alignment.Center) {
+            val frac = ringFrac
             Canvas(Modifier.fillMaxSize()) {
+                if (idle) { // 转盘刻度：每 5 分钟一格
+                    val rr = size.width / 2 - 2.dp.toPx()
+                    for (i in 0 until 12) {
+                        val t = Math.toRadians(i * 30.0 - 90.0)
+                        val cx0 = size.width / 2; val cy0 = size.height / 2
+                        drawLine(C.Faint.copy(alpha = 0.6f),
+                            Offset(cx0 + (rr * Math.cos(t)).toFloat(), cy0 + (rr * Math.sin(t)).toFloat()),
+                            Offset(cx0 + ((rr - 5.dp.toPx()) * Math.cos(t)).toFloat(), cy0 + ((rr - 5.dp.toPx()) * Math.sin(t)).toFloat()),
+                            strokeWidth = 1.5.dp.toPx())
+                    }
+                }
                 val sw = 6.dp.toPx()
                 val inset = sw / 2 + 10.dp.toPx()
                 val sz = Size(size.width - inset * 2, size.height - inset * 2)
@@ -316,11 +359,11 @@ fun FocusScreen(onBack: () -> Unit = {}) {
                 if (frac > 0f) drawCircle(accent, sw * 0.55f, Offset(cx, cy))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(mmss(left), fontSize = 60.sp, fontWeight = FontWeight.Light, color = C.Ink,
+                Text(if (idle) mmss(dialMin * 60_000L) else mmss(left), fontSize = 60.sp, fontWeight = FontWeight.Light, color = C.Ink,
                     fontFamily = FontFamily.SansSerif, letterSpacing = 1.sp)
                 Text(
                     when {
-                        phase == Focus.IDLE -> tr("准备好了就开始")
+                        phase == Focus.IDLE -> tr("沿圆环拖动调时长")
                         !running -> tr("已暂停")
                         isBreak -> tr("放松一下")
                         else -> tr("正在专注")
