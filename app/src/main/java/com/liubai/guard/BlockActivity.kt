@@ -32,7 +32,7 @@ class BlockActivity : ComponentActivity() {
         finish()
     }
 
-    override fun onResume() { super.onResume(); GuardService.instance?.uncover() }
+    override fun onResume() { super.onResume(); GuardService.instance?.uncoverAfterDraw(this) }
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)

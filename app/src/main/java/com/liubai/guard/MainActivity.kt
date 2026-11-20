@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onResume() {
-        GuardService.instance?.uncover()
+        GuardService.instance?.uncoverAfterDraw(this)
         super.onResume()
         Keep.heal(this)
         Keep.schedule(this)

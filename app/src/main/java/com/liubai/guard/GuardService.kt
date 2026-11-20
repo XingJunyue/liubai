@@ -477,7 +477,7 @@ class GuardService : AccessibilityService() {
         if (now - lastBlock < 600) return
         lastBlock = now
         lastBlockPkg = pkg
-        cover()
+        cover(why == "focus" || why == "scholar" || (why == "class" && Focus.phase(this) == Focus.WORK))
         // 连点：挡完一两秒内它又冒出来（桌面点得快、动画还没走完），再挡一次
         for (d in longArrayOf(700, 1600)) h.postDelayed({ if (fg == pkg) reason(pkg)?.let { block(pkg, it) } }, d)
         if (Virt.isVirt(pkg)) {
@@ -491,7 +491,7 @@ class GuardService : AccessibilityService() {
                     else try {
                         startActivity(Intent(this@GuardService, BlockActivity::class.java)
                             .putExtra("pkg", pkg).putExtra("why", why)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
                     } catch (x: Exception) {}
                 }
             }
@@ -516,7 +516,7 @@ class GuardService : AccessibilityService() {
         try {
             startActivity(Intent(this, BlockActivity::class.java)
                 .putExtra("pkg", pkg).putExtra("why", why)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
         } catch (x: Exception) {
             Toast.makeText(this, tr("今天的时间用完啦，明天 0:00 见"), Toast.LENGTH_SHORT).show()
         }
@@ -530,16 +530,21 @@ class GuardService : AccessibilityService() {
      */
     private var coverView: android.view.View? = null
     private val uncoverLater = Runnable { uncover() }
-    private fun cover() {
+    private fun cover(toFocusPage: Boolean = false) {
         try {
-            if (coverView == null) {
-                val v = android.view.View(this).apply { setBackgroundColor(0xFFF8E6D8.toInt()) }
+            // 遮罩画成接下来那一页的样子（提示页的渐变 / 专注页的米色），页面出来后淡出，看起来就是直接到了提示页
+            val bg: android.graphics.drawable.Drawable = if (toFocusPage) android.graphics.drawable.ColorDrawable(0xFFFBF6EF.toInt())
+                else (getDrawable(R.drawable.block_bg) ?: android.graphics.drawable.ColorDrawable(0xFFF8E6D8.toInt()))
+            val old = coverView
+            if (old != null) { old.animate().cancel(); old.alpha = 1f; old.background = bg }
+            else {
+                val v = android.view.View(this).apply { background = bg }
                 val lp = android.view.WindowManager.LayoutParams(
                     android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT,
                     android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                     android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    android.graphics.PixelFormat.OPAQUE)
+                    android.graphics.PixelFormat.TRANSLUCENT).apply { windowAnimations = 0 }
                 (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).addView(v, lp)
                 coverView = v
             }
@@ -547,12 +552,29 @@ class GuardService : AccessibilityService() {
             h.postDelayed(uncoverLater, 2500)   // 兜底：提示页没出来也不会一直盖着
         } catch (x: Exception) {}
     }
-    /** 提示页 / 专注页出来了：撤掉遮罩。 */
+    /** 提示页 / 专注页已经画出第一帧：遮罩淡出再撤掉（不是一下子消失）。 */
     fun uncover() {
         h.removeCallbacks(uncoverLater)
         val v = coverView ?: return
         coverView = null
-        try { (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).removeView(v) } catch (x: Exception) {}
+        val wm = getSystemService(WINDOW_SERVICE) as android.view.WindowManager
+        try {
+            v.animate().alpha(0f).setDuration(160).withEndAction { try { wm.removeView(v) } catch (x: Exception) {} }.start()
+        } catch (x: Exception) { try { wm.removeView(v) } catch (y: Exception) {} }
+    }
+    /** 页面这一帧画完之后再撤遮罩：在 onResume 时页面还没画出来，马上撤会先露出一下应用。 */
+    fun uncoverAfterDraw(a: android.app.Activity) {
+        if (coverView == null) return
+        val d = a.window?.decorView ?: run { uncover(); return }
+        val once = object : android.view.ViewTreeObserver.OnDrawListener {
+            var done = false
+            override fun onDraw() {
+                if (done) return
+                done = true
+                d.post { try { d.viewTreeObserver.removeOnDrawListener(this) } catch (x: Exception) {}; h.postDelayed({ uncover() }, 32) }
+            }
+        }
+        try { d.viewTreeObserver.addOnDrawListener(once); d.invalidate() } catch (x: Exception) { uncover() }
     }
 
     /**
@@ -632,7 +654,7 @@ class GuardService : AccessibilityService() {
         val m = Focus.leftMs(this) / 60_000L + 1
         try {
             startActivity(Intent(this, MainActivity::class.java).putExtra("open", "focus")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_ANIMATION))
             Toast.makeText(this, tr("正在专注，还剩 {0} 分钟", m), Toast.LENGTH_SHORT).show()
         } catch (x: Exception) {
             performGlobalAction(GLOBAL_ACTION_HOME)

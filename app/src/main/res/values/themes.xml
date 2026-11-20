@@ -5,6 +5,12 @@
         <item name="android:navigationBarColor">@color/cream</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+    <!-- 提示页：背景直接是提示页的渐变，不要开场动画（遮罩撤掉时下面已经是同样的画面） -->
+    <style name="Theme.Liubai.Block" parent="Theme.Liubai">
+        <item name="android:windowBackground">@drawable/block_bg</item>
+        <item name="android:statusBarColor">#F8E6D8</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
     <color name="cream">#FBF6EF</color>
     <color name="clay">#E38B6D</color>
 </resources>

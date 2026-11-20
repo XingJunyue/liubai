@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 提示页的底色：和 BlockActivity 里的渐变一致，遮罩、窗口背景、页面三者一模一样，切换时看不出接缝 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="270" android:type="linear"
+        android:startColor="#F8E6D8" android:centerColor="#FBF6EF" android:endColor="#FBF6EF" android:centerY="0.55" />
+</shape>

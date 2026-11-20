@@ -39,6 +39,7 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <activity android:name=".BlockActivity" android:exported="false"
+            android:theme="@style/Theme.Liubai.Block"
             android:excludeFromRecents="true" android:launchMode="singleTask"
             android:taskAffinity="com.liubai.guard.block" />
         <activity android:name=".UnlockActivity" android:exported="false"
