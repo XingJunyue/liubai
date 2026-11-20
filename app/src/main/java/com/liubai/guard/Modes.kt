@@ -219,6 +219,7 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
     val sel = remember { mutableStateListOf<String>().apply { addAll(start.pkgs) } }
     var apps by remember { mutableStateOf<List<AppInfo>?>(null) }
     LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { Apps.launchable(c) } }
+    var q by remember { mutableStateOf("") }
     val todayMin = remember { Store.groupsActive(c).firstOrNull { it.id == start.id }?.min }
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -231,7 +232,8 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
             }
             StepSlider(tr("一天一共"), min, 5..240, 5, tr("分钟")) { min = it }
             Text(tr("选应用（已选 {0}）", sel.size), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
-            val list = apps
+            AppSearchBox(q, { q = it }, Modifier.padding(bottom = 4.dp))
+            val list = apps?.let { l -> l.filter { it.matches(q) }.sortedBy { if (it.pkg in start.pkgs) 0 else 1 } }
             Box(Modifier.fillMaxWidth().height(260.dp)) {
                 if (list == null) CircularProgressIndicator(color = C.Clay, modifier = Modifier.align(Alignment.Center))
                 else LazyColumn {

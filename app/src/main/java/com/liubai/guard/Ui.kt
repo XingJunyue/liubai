@@ -171,3 +171,17 @@ fun Every(ms: Long, now: Boolean = true, block: () -> Unit) {
         while (resumed) { kotlinx.coroutines.delay(ms); cb.value() }
     }
 }
+
+
+/** 应用列表的搜索：按应用名或包名，不分大小写。 */
+fun AppInfo.matches(q: String): Boolean { val k = q.trim(); return k.isEmpty() || label.contains(k, ignoreCase = true) || pkg.contains(k, ignoreCase = true) }
+
+/** 所有选应用的界面共用的搜索框。 */
+@androidx.compose.runtime.Composable
+fun AppSearchBox(q: String, onChange: (String) -> Unit, modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier) {
+    androidx.compose.foundation.layout.Box(modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(C.Sand).padding(horizontal = 16.dp, vertical = 13.dp)) {
+        if (q.isEmpty()) androidx.compose.material3.Text(tr("搜索应用"), fontSize = 14.sp, color = C.Faint)
+        androidx.compose.foundation.text.BasicTextField(q, onChange, singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = C.Ink), modifier = androidx.compose.ui.Modifier.fillMaxWidth())
+    }
+}

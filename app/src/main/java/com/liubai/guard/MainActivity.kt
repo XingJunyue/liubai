@@ -583,7 +583,7 @@ fun Picker(onBack: () -> Unit, onNext: (List<AppInfo>) -> Unit) {
         if (list == null) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = C.Clay) }
         } else {
-            val shown = list.filter { q.isBlank() || it.label.contains(q.trim(), ignoreCase = true) }
+            val shown = list.filter { it.matches(q) }
             LazyColumn(Modifier.weight(1f).padding(top = 8.dp)) {
                 items(shown, key = { it.pkg }) { a ->
                     val done = a.pkg in guarded

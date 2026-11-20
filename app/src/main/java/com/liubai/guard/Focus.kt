@@ -690,7 +690,7 @@ fun WhitelistScreen(onBack: () -> Unit) {
         } else {
             val sorted = remember(list) { list.filter { it.pkg !in ess && !Focus.systemService(c, it.pkg) }.sortedBy { if (it.pkg in sel) 0 else 1 } }
             val k = q.trim()
-            val shown = if (k.isEmpty()) sorted else sorted.filter { it.label.contains(k, ignoreCase = true) || it.pkg.contains(k, ignoreCase = true) }
+            val shown = if (k.isEmpty()) sorted else sorted.filter { it.matches(k) }
             androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f).padding(top = 10.dp)) {
                 items(shown.size, key = { shown[it].pkg }) { i ->
                     val a = shown[i]

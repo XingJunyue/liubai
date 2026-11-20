@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,8 +31,12 @@ import org.json.JSONObject
 import java.util.Calendar
 
 data class Todo(val id: String, val text: String, val tag: String, val done: Boolean = false)
-/** 预约番茄：days 用 1–7 表示周一到周日。 */
-data class Plan(val id: String, val days: Set<Int>, val at: Int, val on: Boolean = true)
+/** 预约番茄：days 用 1–7 表示周一到周日；dates 不为空时按日期（yyyyMMdd）预约，不看星期。 */
+data class Plan(val id: String, val days: Set<Int>, val at: Int, val on: Boolean = true, val dates: Set<String> = emptySet()) {
+    val byDate get() = dates.isNotEmpty()
+    /** 这一天（yyyyMMdd，星期 1–7）是否预约了。 */
+    fun hits(day: String, weekday: Int) = if (byDate) day in dates else weekday in days
+}
 
 /** 专注的标签、待办和预约。 */
 object Tasks {
@@ -64,10 +69,12 @@ object Tasks {
     fun plans(c: Context): List<Plan> {
         val a = try { JSONArray(p(c).getString("plans", "[]")) } catch (x: Exception) { JSONArray() }
         return (0 until a.length()).map { val j = a.getJSONObject(it); val d = j.optJSONArray("d") ?: JSONArray()
-            Plan(j.optString("id"), (0 until d.length()).map { d.getInt(it) }.toSet(), j.optInt("a", 480), j.optBoolean("o", true)) }
+            val ds = j.optJSONArray("ds") ?: JSONArray()
+            Plan(j.optString("id"), (0 until d.length()).map { d.getInt(it) }.toSet(), j.optInt("a", 480), j.optBoolean("o", true),
+                (0 until ds.length()).map { ds.getString(it) }.toSet()) }
     }
     fun setPlans(c: Context, l: List<Plan>) {
-        val a = JSONArray(); l.forEach { a.put(JSONObject().put("id", it.id).put("d", JSONArray(it.days.toList())).put("a", it.at).put("o", it.on)) }
+        val a = JSONArray(); l.forEach { a.put(JSONObject().put("id", it.id).put("d", JSONArray(it.days.toList())).put("a", it.at).put("o", it.on).put("ds", JSONArray(it.dates.sorted()))) }
         p(c).edit().putString("plans", a.toString()).apply()
     }
 
@@ -78,7 +85,7 @@ object Tasks {
         if (Focus.phase(c) != Focus.IDLE) return
         val m = Rules.nowMin(); val d = weekday(); val t = Store.today()
         for (pl in plans(c)) {
-            if (!pl.on || d !in pl.days || m < pl.at || m > pl.at + 3) continue
+            if (!pl.on || !pl.hits(t, d) || m < pl.at || m > pl.at + 3) continue
             val k = "fired_${pl.id}"
             if (p(c).getString(k, "") == t) continue
             p(c).edit().putString(k, t).apply()
@@ -184,12 +191,14 @@ fun TaskSheet(onClose: () -> Unit) {
     }
 }
 
-/** 专注设置里的「预约」：每周几的几点自动开始一个番茄。 */
+/** 专注设置里的「预约」：每周几或指定日期的几点自动开始一个番茄。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlanEditor() {
     val c = LocalContext.current
     var plans by remember { mutableStateOf(Tasks.plans(c)) }
     fun save(l: List<Plan>) { plans = l; Tasks.setPlans(c, l) }
+    var pickFor by remember { mutableStateOf<String?>(null) }
     Text(tr("预约番茄"), fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp))
     Text(tr("到点自动开始专注，留白会提醒你"), fontSize = 12.sp, color = C.Faint)
     for (pl in plans) {
@@ -200,14 +209,48 @@ fun PlanEditor() {
                 Text("+", fontSize = 20.sp, color = C.Soft, modifier = Modifier.clip(CircleShape).clickable { save(plans.map { if (it.id == pl.id) it.copy(at = (it.at + 15) % 1440) else it }) }.padding(horizontal = 10.dp))
                 Text(tr("删除"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.clickable { save(plans.filter { it.id != pl.id }) }.padding(start = 8.dp))
             }
-            DayPicker(pl.days) { d -> save(plans.map { if (it.id == pl.id) it.copy(days = d) else it }) }
+            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((byDate, label) in listOf(false to tr("每周"), true to tr("按日期"))) {
+                    val sel = pl.byDate == byDate || (byDate && pickFor == pl.id && pl.dates.isEmpty())
+                    Text(label, fontSize = 12.sp, color = if (sel) Color.White else C.Soft,
+                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (sel) C.Clay else C.Card)
+                            .clickable { if (byDate) { if (!pl.byDate) pickFor = pl.id } else save(plans.map { if (it.id == pl.id) it.copy(dates = emptySet()) else it }) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp))
+                }
+            }
+            if (pl.byDate) {
+                val today = Store.today()
+                FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (d in pl.dates.sorted()) {
+                        val past = d < today
+                        Text("${planDateLabel(d)}  ×", fontSize = 12.sp, color = if (past) C.Faint else C.Ink,
+                            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(C.Card)
+                                .clickable { save(plans.map { if (it.id == pl.id) it.copy(dates = it.dates - d) else it }) }
+                                .padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                    Text(tr("＋ 日期"), fontSize = 12.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { pickFor = pl.id }.padding(horizontal = 6.dp, vertical = 4.dp))
+                }
+            } else DayPicker(pl.days) { d -> save(plans.map { if (it.id == pl.id) it.copy(days = d) else it }) }
         }
+    }
+    pickFor?.let { id ->
+        TermDateDialog(tr("选择日期"), tr("这一天到点自动开始专注"), java.time.LocalDate.now().toEpochDay(), onPick = { ed ->
+            val k = java.time.LocalDate.ofEpochDay(ed).let { "%04d%02d%02d".format(it.year, it.monthValue, it.dayOfMonth) }
+            save(plans.map { if (it.id == id) it.copy(dates = it.dates + k) else it }); pickFor = null
+        }, onClose = { pickFor = null })
     }
     Text(tr("＋ 添加预约"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(10.dp)).clickable {
             save(plans + Plan("p" + System.currentTimeMillis(), setOf(1, 2, 3, 4, 5), 20 * 60))
         }.padding(vertical = 6.dp))
 }
+
+/** 20261124 → 「11月24日 周二」（按界面语言）。 */
+fun planDateLabel(d: String): String = try {
+    val ld = java.time.LocalDate.of(d.substring(0, 4).toInt(), d.substring(4, 6).toInt(), d.substring(6, 8).toInt())
+    tr("{0}月{1}日", ld.monthValue, ld.dayOfMonth) + " " + dayShort(ld.dayOfWeek.value)
+} catch (x: Exception) { d }
 
 @Composable
 fun DayPicker(days: Set<Int>, onChange: (Set<Int>) -> Unit) {

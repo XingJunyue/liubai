@@ -75,6 +75,32 @@ object Ocr {
         Regex("^第?([一二三四五六七八九十]{1,3})(?:节|節|限)$").find(s)?.let { return cn(it.groupValues[1]) }
         return null
     }
+    /** 时间轴上的钟点：8:00、08:00、9am、9 AM、13.00、1 PM → 分钟。 */
+    fun timeOf(t0: String): Int? {
+        val s = t0.trim().lowercase().replace("：", ":").replace(" ", "").replace(".", ":").replace("a:m:", "am").replace("p:m:", "pm")
+        val m = Regex("^(\\d{1,2})(?::(\\d{2}))?(am|pm|a|p|h|noon)?$").find(s) ?: return null
+        var h = m.groupValues[1].toInt(); val mi = m.groupValues[2].toIntOrNull() ?: 0
+        val ap = m.groupValues[3].let { if (it == "a") "am" else if (it == "p" || it == "noon") "pm" else it }
+        if (m.groupValues[2].isEmpty() && ap.isEmpty()) return null      // 光一个数字是节次，不是钟点
+        if (ap == "pm" && h < 12) h += 12
+        if (ap == "am" && h == 12) h = 0
+        if (h !in 0..23 || mi !in 0..59) return null
+        return h * 60 + mi
+    }
+
+    /** 格子里写着的时间段：9:00-10:50、9:00am – 10:50am、14.15–15.45。 */
+    private val RANGE = Regex("(\\d{1,2}[:.：]\\d{2}\\s*(?:[ap]\\.?m?\\.?)?)\\s*[-~～–—]\\s*(\\d{1,2}[:.：]\\d{2}\\s*(?:[ap]\\.?m?\\.?)?)(?![A-Za-z])", RegexOption.IGNORE_CASE)
+    fun rangeOf(t: String): Pair<Int, Int>? {
+        val m = RANGE.find(t) ?: return null
+        var a = timeOf(m.groupValues[1]) ?: return null
+        val bRaw = m.groupValues[2]
+        var b = timeOf(bRaw) ?: return null
+        // 「1:00-2:50pm」：只有后面写了 pm
+        if (Regex("p", RegexOption.IGNORE_CASE).containsMatchIn(bRaw) && !Regex("[ap]", RegexOption.IGNORE_CASE).containsMatchIn(m.groupValues[1]) && a + 12 * 60 < b) a += 12 * 60
+        if (b <= a || b - a > 6 * 60) return null
+        return a to b
+    }
+
     private fun cn(s: String): Int? {
         val d = "一二三四五六七八九"
         return when {
@@ -186,13 +212,30 @@ object Ocr {
             b = (imgH - headBottom) / 12f
             a = headBottom - b / 2f
         }
-        if (b <= 2f) throw IllegalStateException("bad row height")
+        if (b <= 2f && secs.size >= 3) throw IllegalStateException("bad row height")
+        // 国外的课表左边是钟点（8:00、9 AM…）而不是节次：按钟点拟合 y = ta + tb * 分钟
+        val clocks = all.filter { it.cx < leftEdge && it.r.top > headBottom - 4 }.mapNotNull { l -> timeOf(l.t)?.let { it to l.cy } }
+            .groupBy { it.first }.mapValues { e -> e.value.minBy { it.second }.second }
+        val byClock = clocks.size >= 3 && clocks.size >= secs.size
+        var ta = 0f; var tb = 0f
+        if (byClock) {
+            val xs = clocks.keys.map { it.toFloat() }; val ys = clocks.values.toList()
+            val mxs = xs.average().toFloat(); val my = ys.average().toFloat()
+            val sxy = xs.indices.sumOf { ((xs[it] - mxs) * (ys[it] - my)).toDouble() }.toFloat()
+            val sxx = xs.sumOf { ((it - mxs) * (it - mxs)).toDouble() }.toFloat()
+            tb = if (sxx > 0) sxy / sxx else 0f
+            ta = my - tb * mxs
+            if (tb <= 0.05f) throw IllegalStateException("bad time axis")
+        } else if (b <= 2f) throw IllegalStateException("bad row height")
+        // 一格的高度：按节次是一节，按钟点算一小时
+        val unit = if (byClock) tb * 60f else b
+        fun snap(m: Float) = ((m / 5f).roundToInt() * 5).coerceIn(0, 24 * 60)
 
         // 一行字横跨两列（相邻两格的字连在一起被认成一行）：拆成单词再分
         val pieces = all.flatMap { l -> if (l.w > colW * 1.15f && l.parts.size >= 2) l.parts else listOf(l) }
         val timeLike = Regex("^[\\d\\s/.\\-~–—:：月日周週주()（）]+$")
         val body = pieces.filter { it.r.top > headBottom - 2 && it.cx > leftEdge && dayOf(it.t) == null && secOf(it.t) == null && it.t.isNotBlank() &&
-            (!timeLike.matches(it.t.trim()) || WEEKS.containsMatchIn(it.t)) }
+            (!timeLike.matches(it.t.trim()) || WEEKS.containsMatchIn(it.t) || rangeOf(it.t) != null) && (!byClock || timeOf(it.t) == null) }
         val byDay = HashMap<Int, MutableList<L>>()
         for (l in body) {
             val (d, x) = hx.minBy { abs(it.value - l.cx) }
@@ -206,18 +249,34 @@ object Ocr {
             val cells = ArrayList<MutableList<L>>()
             for (l in ls.sortedWith(compareBy({ it.r.top }, { it.r.left }))) {
                 val last = cells.lastOrNull()
-                if (last != null && l.r.top - last.maxOf { it.r.bottom } < b * 0.35f) last += l else cells += mutableListOf(l)
+                if (last != null && l.r.top - last.maxOf { it.r.bottom } < unit * 0.35f) last += l else cells += mutableListOf(l)
             }
             val parsed = cells.mapNotNull { cell ->
-                val rows = cell.groupBy { (it.cy / (b * 0.3f).coerceAtLeast(8f)).toInt() }.toSortedMap().values
+                val rows0 = cell.groupBy { (it.cy / (unit * 0.3f).coerceAtLeast(8f)).toInt() }.toSortedMap().values
                     .map { r -> r.sortedBy { it.r.left }.joinToString(" ") { it.t } }
+                val written = rows0.firstNotNullOfOrNull { rangeOf(it) }
+                val rows = rows0.map { r -> RANGE.replace(r, "").trim() }.filter { it.isNotEmpty() }
                 val name = nameOf(rows) ?: return@mapNotNull null
                 val top = cell.minOf { it.r.top }.toFloat(); val bot = cell.maxOf { it.r.bottom }.toFloat()
+                if (byClock || written != null) {
+                    // 有写明的时间就用写明的；没有就按格子在时间轴上的位置
+                    val f = written?.first ?: snap((top - ta) / tb)
+                    val t = written?.second ?: snap((bot - ta) / tb).coerceAtLeast(f + 30)
+                    return@mapNotNull Cell(name, -f, -t, extras(rows))
+                }
                 val s1 = ((top - a) / b + 0.5f).roundToInt().coerceIn(1, maxSec)
                 val s2 = ((bot - a) / b - 0.5f).roundToInt().coerceIn(s1, maxSec)
                 Cell(name, s1, s2, extras(rows))
             }
             parsed.forEachIndexed { i, (name, s1, s2raw, ex) ->
+                if (s1 <= 0) {   // 按钟点：s1、s2 存的是负的分钟
+                    // 文字只占格子上半截：没写明结束时间、下一节又没挡着时，至少按 50 分钟算
+                    val f = -s1; var t = -s2raw
+                    val nx = parsed.getOrNull(i + 1)?.let { if (it.s1 <= 0) -it.s1 else null }
+                    if (t - f < 50) t = minOf(f + 50, nx ?: (f + 50))
+                    out += Slot("o$d-$f-${name.hashCode()}", name, setOf(d), f, t, room = ex.first, teacher = ex.second, weeks = ex.third)
+                    return@forEachIndexed
+                }
                 // 文字通常只占格子上半截：没有别的课挡着时，按最常见的两节连上
                 val next = parsed.getOrNull(i + 1)?.s1 ?: (maxSec + 1)
                 val s2 = maxOf(s2raw, minOf(s1 + 1, next - 1, maxSec)).coerceAtLeast(s1)
@@ -263,6 +322,8 @@ object Ocr {
             "講義室|号館|号室|先生|강의실|교실|호관|교수|\\d+\\s*교시|(?i)period\\s*\\d+"
     )
 
+    private val CODE = Regex("^[A-Z]{2,5}[ -]?\\d{3,4}[A-Z]?\\b")
+
     /** 从格子里的几行字里挑出课名：去掉教室、老师、周次这些。 */
     fun nameOf(ls: List<String>): String? {
         val parts = ArrayList<String>()
@@ -271,9 +332,12 @@ object Ocr {
             // 表格竖线常被认成「|」「丨」「l」，粘在课名两头
             var t = raw.trim().trimStart('@', '＠').trim('|', '｜', '丨', '¦', '[', ']', '【', '】', ' ')
             // 课名和教室挤在同一行（如「線形代数 講義室3」）：从教室那里截断
-            NOISE.find(t)?.let { m -> if (m.range.first >= 2 && !raw0.trim().startsWith("@")) t = t.substring(0, m.range.first).trim() }
+            // 国外常见的课程代码（CS 101、MATH 2410、ECON1001）是课名的一部分，不是教室号
+            val code = CODE.find(t)?.value ?: ""
+            val rest = t.substring(code.length)
+            NOISE.find(rest)?.let { m -> if (code.length + m.range.first >= 2 && !raw0.trim().startsWith("@")) t = t.substring(0, code.length + m.range.first).trim() }
             if (t.isEmpty()) continue
-            val noise = raw0.trim().startsWith("@") || raw0.trim().startsWith("＠") || NOISE.containsMatchIn(t)
+            val noise = raw0.trim().startsWith("@") || raw0.trim().startsWith("＠") || NOISE.containsMatchIn(t.substring(minOf(code.length, t.length)))
             if (noise) { if (parts.isNotEmpty()) break else continue }
             parts += t
             if (parts.size == 5) break

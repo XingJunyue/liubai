@@ -136,6 +136,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
     var review by remember { mutableStateOf<List<Slot>?>(null) }
     var shot by remember { mutableStateOf<Uri?>(null) }
     var pickCal by remember { mutableStateOf<List<Pair<Long, String>>?>(null) }
+    var icsLink by remember { mutableStateOf(false) }
     var backup by remember { mutableStateOf<Scenes.Backup?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
     var msg by remember { mutableStateOf<String?>(null) }
@@ -173,13 +174,38 @@ fun TimetableScreen(onMenu: () -> Unit) {
         if (u != null) { busy = tr("正在识别课表…"); msg = null; shot = u
             Ocr.read(c, u) { r, e -> busy = null; if (r != null) review = r else msg = e } }
     }
-    val ics = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
-        if (u != null) scope.launch {
-            busy = tr("正在读取…"); msg = null
-            val r = withContext(Dispatchers.IO) { try { Scenes.fromIcs(c, u) } catch (x: Exception) { null } }
-            busy = null
-            if (r.isNullOrEmpty()) msg = tr("这个文件里没读到课程") else { shot = null; review = r }
+    /** 日历（文件或订阅链接）读出来后：需要时按日历定开学日期和总周数，再让用户勾选要加的课。 */
+    fun useIcs(r: Ics.Result?, err: String?) {
+        busy = null
+        when {
+            r == null -> msg = err ?: tr("这个文件里没读到课程")
+            r.slots.isEmpty() -> msg = if (r.deadlines > 0) tr("只读到 {0} 个截止日期，没有上下课时间的课。换成学校课表系统的订阅链接试试。", r.deadlines) else tr("这个文件里没读到课程")
+            else -> {
+                r.firstMonday?.let { Scenes.setTermStart(c, it) }
+                if (r.maxWeek > Scenes.totalWeeks(c)) Scenes.setTotalWeeks(c, r.maxWeek)
+                ver++
+                msg = listOfNotNull(
+                    r.firstMonday?.let { tr("已按日历把第 1 周设为 {0} 那周", ymd(it)) },
+                    if (r.deadlines > 0) tr("跳过了 {0} 个截止日期", r.deadlines) else null
+                ).joinToString("；").ifEmpty { null }
+                shot = null; review = r.slots
+            }
         }
+    }
+    fun runIcs(read: () -> String) = scope.launch {
+        busy = tr("正在读取…"); msg = null
+        var err: String? = null
+        val r = withContext(Dispatchers.IO) {
+            try { Ics.parse(read(), Scenes.termStart(c), Scenes.totalWeeks(c)) }
+            catch (x: Ics.LinkDead) { err = tr("链接打不开（{0}），可能已经失效。到学校网站重新复制一次订阅链接。", x.code); null }
+            catch (x: Ics.NotCalendar) { err = tr("这个链接打开的不是日历（多半是登录页）。要复制「订阅 / iCal」那个链接，不是网页地址。"); null }
+            catch (x: java.io.IOException) { err = tr("连不上：{0}", x.message ?: ""); null }
+            catch (x: Exception) { err = tr("读取失败：{0}", x.message ?: ""); null }
+        }
+        useIcs(r, err)
+    }
+    val ics = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
+        if (u != null) runIcs { c.contentResolver.openInputStream(u)?.bufferedReader()?.use { it.readText() } ?: "" }
     }
     val calPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) pickCal = try { Scenes.calendars(c) } catch (x: Exception) { emptyList() } else msg = tr("没有日历权限，读不到")
@@ -191,10 +217,18 @@ fun TimetableScreen(onMenu: () -> Unit) {
             busy = null
             when {
                 raw == null -> msg = tr("读不了这个文件")
-                raw.size > 4 && raw[0] == 'P'.code.toByte() && raw[1] == 'K'.code.toByte() -> msg = tr("这是 .xlsx 文件，请在 Excel / WPS 里「另存为」CSV（逗号分隔）再导入")
+                raw.size > 4 && raw[0] == 'P'.code.toByte() && raw[1] == 'K'.code.toByte() -> {
+                    // Workday「Export to Excel」之类的选课清单：直接认
+                    val sis = withContext(Dispatchers.Default) { try { SisSheet.meets(SisSheet.xlsx(raw) ?: emptyList()) } catch (x: Exception) { emptyList() } }
+                    if (sis.isNotEmpty()) useIcs(SisSheet.slots(sis, Scenes.termStart(c), Scenes.totalWeeks(c)), null)
+                    else msg = tr("这是 .xlsx 文件，请在 Excel / WPS 里「另存为」CSV（逗号分隔）再导入")
+                }
                 else -> {
-                    val r = withContext(Dispatchers.Default) { try { Jw.clean(Jw.csv(decodeText(raw))) } catch (x: Exception) { emptyList() } }
-                    if (r.isEmpty()) msg = tr("没读到课程。表头应为：课程名称,星期,开始节数,结束节数,老师,地点,周数") else preview = r to true
+                    val text = decodeText(raw)
+                    val r = withContext(Dispatchers.Default) { try { Jw.clean(Jw.csv(text)) } catch (x: Exception) { emptyList() } }
+                    val sis = if (r.isEmpty()) withContext(Dispatchers.Default) { try { SisSheet.meets(SisSheet.csv(text)) } catch (x: Exception) { emptyList() } } else emptyList()
+                    if (sis.isNotEmpty()) useIcs(SisSheet.slots(sis, Scenes.termStart(c), Scenes.totalWeeks(c)), null)
+                    else if (r.isEmpty()) msg = tr("没读到课程。表头应为：课程名称,星期,开始节数,结束节数,老师,地点,周数") else preview = r to true
                 }
             }
         }
@@ -274,8 +308,10 @@ fun TimetableScreen(onMenu: () -> Unit) {
             Box {
                 TopIcon(onClick = { importMenu = true }) { ImportGlyph(C.Ink) }
                 DropdownMenu(importMenu, { importMenu = false }, modifier = Modifier.background(C.Card)) {
+                    // 国外的学校多半给日历订阅链接：非中文界面放在最上面
+                    if (!Tr.cjk) MenuRow(tr("日历订阅链接"), tr("Canvas、Moodle、学校课表系统的 iCal 链接")) { importMenu = false; icsLink = true }
                     MenuRow(tr("从教务导入"), tr("登录学校教务网站，一键导入")) { importMenu = false; web = true }
-                    MenuRow(tr("Excel / CSV 导入"), tr("课程名、星期、节次、老师、地点、周数")) { importMenu = false; csv.launch(arrayOf("text/*", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "*/*")) }
+                    MenuRow(tr("Excel / CSV 导入"), if (Tr.cjk) tr("课程名、星期、节次、老师、地点、周数") else tr("Workday 等选课系统导出的课程清单，或自己整理的表格")) { importMenu = false; csv.launch(arrayOf("text/*", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "*/*")) }
                     MenuRow(tr("HTML 导入"), tr("保存下来的教务课表网页")) { importMenu = false; html.launch(arrayOf("text/html", "application/xhtml+xml", "*/*")) }
                     MenuRow(tr("截图识别"), tr("课表截图，本机识别")) { importMenu = false; img.launch("image/*") }
                     MenuRow(tr("从日历导入"), tr("系统日历里的课程日程")) {
@@ -284,6 +320,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
                             pickCal = try { Scenes.calendars(c) } catch (x: Exception) { emptyList() }
                         else calPerm.launch(Manifest.permission.READ_CALENDAR)
                     }
+                    if (Tr.cjk) MenuRow(tr("日历订阅链接"), tr("Canvas、Moodle、学校课表系统的 iCal 链接")) { importMenu = false; icsLink = true }
                     MenuRow(tr(".ics 文件"), tr("课表 App 或教务导出的日历文件")) { importMenu = false; ics.launch(arrayOf("text/calendar", "*/*")) }
                     HorizontalDivider(color = C.Track)
                     MenuRow(tr("从备份导入"), tr("留白导出的课表备份")) { importMenu = false; restore.launch(arrayOf("application/json", "text/*", "*/*")) }
@@ -350,6 +387,7 @@ fun TimetableScreen(onMenu: () -> Unit) {
         val names = picked.map { "${it.name}|${it.days}|${it.from}" }.toSet()
         save(cur.filter { "${it.name}|${it.days}|${it.from}" !in names } + picked); review = null
     }, onClose = { review = null }) }
+    if (icsLink) IcsLinkSheet(onGo = { u -> icsLink = false; runIcs { Ics.fetch(u) } }, onClose = { icsLink = false })
     pickCal?.let { cals -> CalendarPick(cals, onPick = { id ->
         pickCal = null
         scope.launch {

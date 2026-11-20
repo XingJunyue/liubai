@@ -42,8 +42,11 @@ fun WidgetScreen(onDone: (() -> Unit)? = null) {
         if (apps.isEmpty()) {
             Text(tr("还没有在守护的应用，先在「今天」里添加吧。"), fontSize = 14.sp, color = C.Faint, modifier = Modifier.padding(top = 24.dp))
         }
+        var q by remember { mutableStateOf("") }
+        if (apps.size > 5) AppSearchBox(q, { q = it }, Modifier.padding(top = 12.dp))
+        val shown = apps.filter { it.matches(q) }
         LazyColumn(Modifier.weight(1f).padding(top = 10.dp)) {
-            items(apps, key = { it.pkg }) { a ->
+            items(shown, key = { it.pkg }) { a ->
                 val idx = sel.indexOf(a.pkg)
                 Row(
                     Modifier.fillMaxWidth().clickable { if (idx >= 0) sel.remove(a.pkg) else sel.add(a.pkg); save() }
