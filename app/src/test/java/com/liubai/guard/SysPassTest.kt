@@ -18,3 +18,16 @@ class SysPassTest {
         assertFalse(Focus.sysByFlags(system = false, launchable = false))
     }
 }
+
+class TappedTest {
+    private val labels = mapOf("com.ss.android.ugc.aweme" to "抖音", "com.tencent.mobileqq" to "QQ")
+    @org.junit.Test fun exactAndBadge() {
+        org.junit.Assert.assertEquals("com.ss.android.ugc.aweme", GuardService.tapped(listOf("抖音"), labels))
+        org.junit.Assert.assertEquals("com.ss.android.ugc.aweme", GuardService.tapped(listOf("抖音，3条未读"), labels))
+    }
+    @org.junit.Test fun noPrefixFalsePositive() {
+        org.junit.Assert.assertNull(GuardService.tapped(listOf("QQ音乐"), labels))
+        org.junit.Assert.assertNull(GuardService.tapped(listOf("抖音极速版"), labels))
+        org.junit.Assert.assertNull(GuardService.tapped(listOf(""), labels))
+    }
+}

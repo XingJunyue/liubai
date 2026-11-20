@@ -35,6 +35,19 @@ class GuardService : AccessibilityService() {
         /** 名单之外的品牌：包名像设置、安装器、手机管家的也一起看。 */
         private val HINTS = listOf("settings", "packageinstaller", "securitycenter", "safecenter", "systemmanager", "permission", "launcher", "appdetail")
         fun sensitive(pkg: String) = pkg in SETTINGS || HINTS.any { it in pkg }
+        private val SEP = setOf(',', '，', '、', ' ', '(', '（', ':', '：', ';', '；', '\n')
+        /** 桌面上点的是哪个应用图标：图标的字要么就是应用名，要么是「应用名，1 条未读」这种。 */
+        fun tapped(said: List<String>, labels: Map<String, String>): String? {
+            var best: String? = null; var len = 0
+            for (raw in said) {
+                val t = raw.trim()
+                for ((pkg, l) in labels) {
+                    if (l.isBlank() || l.length <= len) continue
+                    if (t == l || (t.startsWith(l) && t[l.length] in SEP)) { best = pkg; len = l.length }
+                }
+            }
+            return best
+        }
         // 只拦真正会关掉守护的按钮；页面本身随便看
         private val DANGER = listOf("卸载", "停用", "强行停止", "结束运行", "清除数据", "清除全部数据", "清空数据", "取消激活",
             "Uninstall", "Force stop", "Clear data", "Clear storage", "Disable", "Deactivate",
@@ -198,6 +211,8 @@ class GuardService : AccessibilityService() {
         val evPkg = e.packageName?.toString()
         val st = e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         if (st) Virt.see(evPkg, e.className?.toString())
+        // 在桌面点了一个已经到点的应用：不等它打开，马上挡住（不让它闪出画面）
+        if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED && evPkg != null && (evPkg == homePkg || "launcher" in evPkg || evPkg == "com.miui.home")) preempt(e)
         if (WAdb.status == "waiting" && evPkg != null && "settings" in evPkg) {
             WAdb.scan(this, try { windows.map { it.root } + rootInActiveWindow } catch (x: Exception) { listOf(rootInActiveWindow) })
         }
@@ -261,6 +276,24 @@ class GuardService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (essCache == null || now - essAt > 60_000) { essCache = Focus.essentials(this); essAt = now }
         return essCache!!
+    }
+
+    private var lblCache: Map<String, String>? = null
+    private var lblAt = 0L
+    private fun guardedLabels(): Map<String, String> {
+        val now = SystemClock.elapsedRealtime()
+        lblCache?.let { if (now - lblAt < 60_000) return it }
+        val ps = Store.active(this).keys + Store.groupsActive(this).flatMap { it.pkgs }
+        return ps.filter { !Virt.isVirt(it) }.associateWith { Apps.info(this, it).label }.also { lblCache = it; lblAt = now }
+    }
+
+    private fun preempt(e: AccessibilityEvent) {
+        val said = e.text.map { it.toString() } + listOfNotNull(e.contentDescription?.toString()) +
+            (try { e.source?.let { listOfNotNull(it.text?.toString(), it.contentDescription?.toString()) } } catch (x: Exception) { null } ?: emptyList())
+        val pkg = tapped(said, guardedLabels()) ?: return
+        val why = reason(pkg) ?: return
+        Diag.log("桌面点了 $pkg，已到点（$why），直接挡")
+        block(pkg, why, early = true)
     }
 
     private fun guarded(pkg: String): Boolean =
@@ -428,13 +461,16 @@ class GuardService : AccessibilityService() {
         pendMs = 0
     }
 
-    private fun block(pkg: String, why: String) {
+    private fun block(pkg: String, why: String, early: Boolean = false) {
         flush()
         Diag.log("拦 $pkg $why")
         val now = SystemClock.elapsedRealtime()
-        if (now - lastBlock < 1500 || (pkg == lastBlockPkg && now - lastBlock < 5000)) return
+        // 只合并同一瞬间的重复事件；挡完再点开，立刻再挡（以前 5 秒内再打开会漏掉，能看好几秒）
+        if (now - lastBlock < 600) return
         lastBlock = now
         lastBlockPkg = pkg
+        // 连点：挡完一两秒内它又冒出来（桌面点得快、动画还没走完），再挡一次
+        for (d in longArrayOf(700, 1600)) h.postDelayed({ if (fg == pkg) reason(pkg)?.let { block(pkg, it) } }, d)
         if (Virt.isVirt(pkg)) {
             // 只退出视频号，不把整个微信关掉：连按返回直到离开，再盖上提示
             fg = packageName
@@ -463,8 +499,10 @@ class GuardService : AccessibilityService() {
             passPkg = null
             return
         }
-        performGlobalAction(GLOBAL_ACTION_HOME)
+        if (!early) performGlobalAction(GLOBAL_ACTION_HOME)
         Widgets.updateAll(this)
+        // 挡完把它的后台进程清掉：再点开只能冷启动，画面还没出来就会被挡
+        h.postDelayed({ try { (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).killBackgroundProcesses(pkg) } catch (x: Exception) {} }, 800)
         try {
             startActivity(Intent(this, BlockActivity::class.java)
                 .putExtra("pkg", pkg).putExtra("why", why)
