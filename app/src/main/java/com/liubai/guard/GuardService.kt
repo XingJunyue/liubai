@@ -277,16 +277,18 @@ class GuardService : AccessibilityService() {
     private fun reason(pkg: String): String? {
         if (pkg == packageName) return null
         if (updatePass(pkg)) return null
-        if (Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"
+        // 系统设置、GMS 等系统服务：专注和所有课程时段都不拦
+        val sys = Focus.systemService(this, pkg)
+        if (!sys && Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"
         // 重要的课：和无敌模式一样，只开放白名单
-        if (Scenes.strictNow(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss() && pkg != homePkg) return "class"
+        if (!sys && Scenes.strictNow(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss() && pkg != homePkg) return "class"
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
         if (lim == null && groups.isEmpty()) return null
-        if (Focus.locking(this)) return "focus"
+        if (!sys && Focus.locking(this)) return "focus"
         // 紧急用一下：这几分钟放行（专注、重要课不放）
         if (System.currentTimeMillis() < Store.sosUntil(this, pkg)) return null
-        if (Scenes.lockNow(this)) return "scene"
+        if (!sys && Scenes.lockNow(this)) return "scene"
         val m = Rules.nowMin()
         val bed = Store.bedActive(this)
         if (bed.on && Rules.inWin(m, bed.from, bed.to)) return "bed"
@@ -306,7 +308,7 @@ class GuardService : AccessibilityService() {
     private fun maybePause(pkg: String): Boolean {
         if (pkg == passPkg || reason(pkg) != null || !guarded(pkg)) return false
         val x = Store.extraActive(this, pkg)
-        val light = Scenes.lightNow(this)          // 水课：每次打开都先停一下、问一句
+        val light = Scenes.lightNow(this) && !Focus.systemService(this, pkg)   // 水课：每次打开都先停一下、问一句（系统服务不停）
         var d = x.delay
         if (x.grow) d += 5 * Store.opens(this, pkg)
         if (light) d = maxOf(d, 10)

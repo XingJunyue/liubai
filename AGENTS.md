@@ -43,6 +43,9 @@
 - 第三方参考只用 MIT / Apache-2.0 代码并保留署名（THIRD_PARTY_NOTICES.md，以及 `Jw.kt`/`JwAdapters.kt` 文件头）；不要复制 GPL 项目代码（Dawn-Course、sleepy 等）。
 - 管控按"本周有课"过滤，依赖开学日期和课程周数；开学日期不从教务读取，导入后需用户确认。
 
+## 系统服务放行
+- `Focus.systemService`（名单 `SYS_PKGS` + 包名带 settings/permissioncontroller/packageinstaller + 系统自带且桌面没图标）：专注锁定、无敌模式、重要/普通课锁定、水课停顿、上课收通知都放行它们。桌面有图标的系统应用（浏览器、相册、应用商店）不算。防卸载保护（`sensitive`/`guardDialog`）不受影响。单测 `SysPassTest`。
+
 ## 时长统计
 - `UsageTally` 按「包名/界面类名」跟踪前台界面，应用所有界面都离开才停表（安卓事件顺序是 PAUSED 旧→RESUMED 新→STOPPED 旧，不能在同包 STOPPED 时停表）。有单测 `UsageTallyTest`。
 

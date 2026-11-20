@@ -58,7 +58,7 @@ object Hush {
 
     fun keep(c: Context, sbn: StatusBarNotification): Boolean {
         val pkg = sbn.packageName
-        if (pkg == c.packageName || pkg in ALWAYS || pkg in Focus.whitelist(c) || pkg in Focus.essentials(c)) return true
+        if (pkg == c.packageName || pkg in ALWAYS || pkg in Focus.whitelist(c) || pkg in Focus.essentials(c) || Focus.systemService(c, pkg)) return true
         val n = sbn.notification
         if (sbn.isOngoing || n.category == android.app.Notification.CATEGORY_CALL || n.category == android.app.Notification.CATEGORY_ALARM) return true
         return false

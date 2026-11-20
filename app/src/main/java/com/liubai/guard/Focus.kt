@@ -136,6 +136,40 @@ object Focus {
         return s
     }
 
+    /** 系统设置、谷歌 / 华为移动服务这类系统服务：专注、无敌模式、各种课程时段都不拦（防卸载的保护照旧）。 */
+    val SYS_PKGS = setOf("com.android.settings", "com.android.settings.intelligence", "com.google.android.settings.intelligence",
+        "com.google.android.gms", "com.google.android.gsf", "com.google.android.gms.policy_sidecar_aps", "com.google.android.ext.services",
+        "com.google.android.webview", "com.android.webview", "com.android.providers.downloads.ui", "com.android.documentsui",
+        "com.google.android.documentsui", "com.android.vpndialogs", "com.android.captiveportallogin", "com.google.android.captiveportallogin",
+        "com.android.bluetooth", "com.android.nfc", "com.android.printspooler", "com.android.keychain", "com.android.certinstaller",
+        "com.android.wallpaper.livepicker", "com.android.managedprovisioning", "com.google.android.apps.restore", "com.google.android.setupwizard",
+        "com.android.provision", "com.android.credentialmanager", "com.android.shell",
+        // 华为 / 荣耀：HMS Core、账号、设置
+        "com.huawei.hwid", "com.huawei.android.hwouc", "com.hihonor.id", "com.huawei.systemmanager", "com.hihonor.systemmanager",
+        // 小米、OPPO、vivo、三星等的设置与系统服务
+        "com.xiaomi.account", "com.miui.securitycenter", "com.miui.securitycore", "com.miui.permcenter", "com.miui.securityadd",
+        "com.xiaomi.xmsf", "com.miui.powerkeeper", "com.oplus.battery", "com.coloros.safecenter", "com.oplus.safecenter",
+        "com.coloros.securitypermission", "com.oplus.appdetail", "com.iqoo.secure", "com.vivo.permissionmanager",
+        "com.samsung.android.lool", "com.samsung.android.sm.devicesecurity", "com.samsung.android.app.settings.bixby",
+        "com.meizu.safe", "com.zui.safecenter")
+    private val SYS_HINTS = listOf(".settings", "settings.", "permissioncontroller", "packageinstaller")
+    /** 看包名是否在系统服务名单里，或者带设置 / 权限 / 安装器字样（纯函数，单测）。 */
+    fun sysByName(pkg: String) = pkg in SYS_PKGS || pkg.startsWith("com.google.android.gms") || SYS_HINTS.any { it in pkg }
+    /** 系统自带、桌面上没有图标的后台组件（账号选择、授权弹窗等）也算系统服务；桌面有图标的系统应用（浏览器、相册、应用商店）不算。 */
+    fun sysByFlags(system: Boolean, launchable: Boolean) = system && !launchable
+    private val sysCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    fun systemService(c: Context, pkg: String): Boolean {
+        if (sysByName(pkg)) return true
+        return sysCache.getOrPut(pkg) {
+            try {
+                val pm = c.packageManager
+                val ai = pm.getApplicationInfo(pkg, 0)
+                val system = ai.flags and (android.content.pm.ApplicationInfo.FLAG_SYSTEM or android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                sysByFlags(system, pm.getLaunchIntentForPackage(pkg) != null)
+            } catch (x: Exception) { false }
+        }
+    }
+
     /** 专注进行中，且选了「专注时锁住守护中的应用」。 */
     fun locking(c: Context) = phase(c) == WORK && lockApps(c)
 
