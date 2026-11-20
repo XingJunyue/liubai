@@ -293,14 +293,17 @@ fun AboutScreen() {
     }
 }
 
-/** 打开留白时自动查一次，有新版本就弹窗；可以「以后再说」，3 小时内不再打扰。 */
+/**
+ * 强制更新：有新版本就必须更新才能用，不更新只能退出（守护在后台照常工作）。
+ * 记住查到的最新版本号，退出再进来不用重新查也会立刻弹出；查不到（没网）时照常使用。
+ */
 @Composable
 fun UpdatePrompt() {
     if (!Updater.enabled()) return
     val c = LocalContext.current
     val scope = rememberCoroutineScope()
     val pr = remember { c.getSharedPreferences("upd", Context.MODE_PRIVATE) }
-    var rel by remember { mutableStateOf<Release?>(null) }
+    var rel by remember { mutableStateOf<Release?>(pr.getInt("need", 0).let { n -> if (n > BuildConfig.VERSION_CODE) Release(n, tr("留白 1.{0}", n), pr.getString("needNotes", "") ?: "", "https://github.com/${Updater.REPO}/releases/download/build-$n/liubai-1.$n.apk") else null }) }
     var state by remember { mutableStateOf("ask") } // ask downloading error noperm
     var prog by remember { mutableStateOf(0f) }
 
@@ -315,18 +318,17 @@ fun UpdatePrompt() {
     LaunchedEffect(resumes) {
         if (resumes == 0 || state == "downloading") return@LaunchedEffect
         val now = System.currentTimeMillis()
-        if (rel != null || now - pr.getLong("checked", 0L) < 60_000L) return@LaunchedEffect
+        if (now - pr.getLong("checked", 0L) < 60_000L) return@LaunchedEffect
         pr.edit().putLong("checked", now).apply()
         val r = withContext(Dispatchers.IO) { try { Updater.latest() } catch (x: Exception) { null } }
-        if (r == null || r.code <= BuildConfig.VERSION_CODE) return@LaunchedEffect
-        // 「以后再说」只压住那一个版本 1 小时；一出更新的版本马上再提示
-        val skipped = pr.getInt("skipCode", 0)
-        if (r.code <= skipped && now - pr.getLong("later", 0L) < 3600_000L) return@LaunchedEffect
-        rel = r; state = "ask"
+        if (r == null) return@LaunchedEffect
+        if (r.code <= BuildConfig.VERSION_CODE) { pr.edit().remove("need").remove("needNotes").apply(); rel = null; return@LaunchedEffect }
+        pr.edit().putInt("need", r.code).putString("needNotes", r.notes).apply()
+        if (rel == null || r.code > rel!!.code) { rel = r; state = "ask" }
     }
     val r = rel
     if (r != null) {
-    fun later() { pr.edit().putLong("later", System.currentTimeMillis()).putInt("skipCode", r.code).apply(); rel = null }
+    fun quit() { (c as? android.app.Activity)?.finishAndRemoveTask() }
     fun go() {
         if (!Updater.canInstall(c)) {
             state = "noperm"
@@ -346,7 +348,8 @@ fun UpdatePrompt() {
         }
     }
     AlertDialog(
-        onDismissRequest = { if (state != "downloading") rel = null },
+        onDismissRequest = { if (state != "downloading") quit() },
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
         containerColor = C.Card,
         title = { Text(tr("发现新版本 {0}", r.name), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink) },
         text = {
@@ -359,7 +362,10 @@ fun UpdatePrompt() {
                     }
                     "error" -> Text(tr("下载没成功，换个网络再试试"), fontSize = 14.sp, color = C.ClayDeep)
                     "noperm" -> Text(tr("请允许留白「安装未知应用」，回来再点更新"), fontSize = 14.sp, color = C.ClayDeep)
-                    else -> Text(if (r.notes.isNotBlank()) r.notes else tr("守护设置更新后都会保留。"), fontSize = 14.sp, color = C.Soft, lineHeight = 21.sp)
+                    else -> Column {
+                        Text(tr("要更新到最新版才能继续用。守护设置更新后都会保留，不更新也照常在后台守护。"), fontSize = 14.sp, color = C.Ink, lineHeight = 21.sp)
+                        if (r.notes.isNotBlank()) Text(r.notes, fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 8.dp).heightIn(max = 220.dp).verticalScroll(rememberScrollState()))
+                    }
                 }
             }
         },
@@ -369,7 +375,7 @@ fun UpdatePrompt() {
             }
         },
         dismissButton = {
-            if (state != "downloading") TextButton(onClick = { later() }) { Text(tr("以后再说"), color = C.Soft) }
+            if (state != "downloading") TextButton(onClick = { quit() }) { Text(tr("退出"), color = C.Soft) }
         }
     )
 }
