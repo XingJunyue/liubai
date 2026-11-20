@@ -199,6 +199,7 @@ class GuardService : AccessibilityService() {
         h.removeCallbacks(tick)
         h.removeCallbacks(dialogCheck)
         h.removeCallbacks(armScan)
+        clearFloats()
         try { unregisterReceiver(screen) } catch (x: Exception) {}
         super.onDestroy()
     }
@@ -225,7 +226,10 @@ class GuardService : AccessibilityService() {
             val act = try { rootInActiveWindow?.packageName?.toString() } catch (x: Exception) { null } ?: evPkg
             // 小窗、悬浮便签之类可能抢走「活动窗口」：铺满屏幕的那个应用才是真正在用的
             val big = bigApp()
-            val pkg = Virt.map(if (big != null && big != act && guarded(big) && (act == null || !guarded(act))) big else act)
+            // 留白（或别的应用）开成小窗时，底下铺满的那个应用该挡也要挡（以前只看活动窗口，小窗一开就能绕过去）
+            val bigWhy = if (big != null && big != act && big != packageName && big != homePkg) reason(Virt.map(big) ?: big) else null
+            val pkg = Virt.map(if (big != null && big != act && (bigWhy != null || guarded(big) && (act == null || !guarded(act)))) big else act)
+            val behind = pkg != null && pkg != Virt.map(act)
             if (pkg != null && pkg !in IGNORE && pkg != fg) {
                 flush()
                 if (fg != null && fg != packageName && guarded(fg!!)) { lastWidget = 0L }  // 离开受守护应用，马上刷新一次
@@ -236,7 +240,8 @@ class GuardService : AccessibilityService() {
                 if (pkg != packageName) { if (guarded(pkg)) enter(pkg) else inOpen = null }
                 if (hot() != wasHot) kick()
             }
-            fg?.let { p -> reason(p)?.let { block(p, it) } }
+            fg?.let { p -> reason(p)?.let { block(p, it, behind = behind && p == pkg) } }
+            floatScan()
             // 桌面弹出长按菜单 / 卸载框时只有「窗口变化」事件，没有包名：在桌面就盯一下
             val f0 = fg
             if (!st && f0 != null && (f0 == homePkg || "launcher" in f0) && locked()) {
@@ -427,6 +432,7 @@ class GuardService : AccessibilityService() {
         if (t != day) { day = t; flush(); Widgets.updateAll(this) }
         // 熄屏时什么都不做（小部件也看不见，不用刷新）
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); passPkg = null; return }
+        if (hot() || floatViews.isNotEmpty()) floatScan()
         // 正在用受守护的应用时，小部件 1 分钟跟一次；平时 5 分钟一次（内容没变就不重绘）
         val hot = fg?.let { it != packageName && guarded(it) } == true
         if (now - lastWidget > (if (hot) 60_000 else 300_000)) { lastWidget = now; flush(); Widgets.updateAll(this) }
@@ -463,7 +469,7 @@ class GuardService : AccessibilityService() {
         pendMs = 0
     }
 
-    private fun block(pkg: String, why: String, early: Boolean = false) {
+    private fun block(pkg: String, why: String, early: Boolean = false, behind: Boolean = false) {
         flush()
         Diag.log("拦 $pkg $why")
         val now = SystemClock.elapsedRealtime()
@@ -497,7 +503,8 @@ class GuardService : AccessibilityService() {
         if (why == "focus" || why == "scholar" || (why == "class" && Focus.phase(this) == Focus.WORK)) {
             // 专注中：不回桌面，直接回到留白的专注界面
             Widgets.updateAll(this)
-            toFocus()
+            // 要挡的应用在底下铺满、留白开在小窗里：先回桌面把它收起来，不然打开专注页它还在底下
+            if (behind) { performGlobalAction(GLOBAL_ACTION_HOME); h.postDelayed({ toFocus() }, 350) } else toFocus()
             fg = packageName
             passPkg = null
             return
@@ -546,6 +553,78 @@ class GuardService : AccessibilityService() {
         val v = coverView ?: return
         coverView = null
         try { (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).removeView(v) } catch (x: Exception) {}
+    }
+
+    /**
+     * 小窗 / 分屏 / 悬浮窗 / 画中画里的应用：到点了也要挡。系统不让别的应用关掉别人的小窗，
+     * 所以在那个小窗的位置盖一块不透明的板（无障碍自己的窗口，在所有应用之上），点不到、看不到；
+     * 再抢一下音频焦点，让它的声音停下来。小窗关掉或者不该挡了就撤掉。
+     */
+    private val floatViews = HashMap<Int, android.view.View>()
+    private var floatAudio: Any? = null
+    private fun floatScan() {
+        val wins = try {
+            windows.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }.mapNotNull { w ->
+                val r = android.graphics.Rect(); w.getBoundsInScreen(r)
+                val p = w.root?.packageName?.toString() ?: return@mapNotNull null
+                Triple(w.id, p, r)
+            }
+        } catch (x: Exception) { return }
+        val dm = resources.displayMetrics
+        val screenArea = dm.widthPixels.toLong() * dm.heightPixels
+        val want = HashMap<Int, Pair<android.graphics.Rect, String>>()
+        for ((id, p0, r) in wins) {
+            val p = Virt.map(p0) ?: continue
+            if (p == packageName || p0 == packageName || p in IGNORE || p == homePkg || "launcher" in p) continue
+            if (r.width() <= 0 || r.height() <= 0) continue
+            // 铺满屏幕的交给上面的正常拦截；这里只管小窗
+            if (r.width().toLong() * r.height() >= screenArea * 8 / 10) continue
+            reason(p) ?: continue
+            want[id] = r to p
+        }
+        val wm = getSystemService(WINDOW_SERVICE) as android.view.WindowManager
+        for (id in floatViews.keys - want.keys) { try { wm.removeView(floatViews[id]) } catch (x: Exception) {}; floatViews.remove(id) }
+        for ((id, v) in want) {
+            val (r, p) = v
+            val lp = android.view.WindowManager.LayoutParams(r.width(), r.height(),
+                android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.OPAQUE).apply { gravity = android.view.Gravity.TOP or android.view.Gravity.START; x = r.left; y = r.top }
+            val old = floatViews[id]
+            try {
+                if (old != null) wm.updateViewLayout(old, lp) else {
+                    val tv = android.widget.TextView(this).apply {
+                        text = tr("{0} 已到点，这一块先盖住了", try { Apps.info(this@GuardService, p).label } catch (x: Exception) { p })
+                        setTextColor(0xFF8A5A44.toInt()); textSize = 14f; gravity = android.view.Gravity.CENTER
+                        setBackgroundColor(0xFFF8E6D8.toInt()); setPadding(24, 24, 24, 24)
+                        setOnTouchListener { _, _ -> true }
+                    }
+                    wm.addView(tv, lp); floatViews[id] = tv
+                    Diag.log("小窗里的 $p 已到点，盖住（${r.width()}x${r.height()}）")
+                }
+            } catch (x: Exception) { Diag.log("小窗盖不住：${x.message}") }
+        }
+        holdAudio(floatViews.isNotEmpty())
+    }
+    private fun holdAudio(on: Boolean) {
+        try {
+            val am = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
+            if (on && floatAudio == null && android.os.Build.VERSION.SDK_INT >= 26) {
+                val req = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    .setOnAudioFocusChangeListener { }.build()
+                am.requestAudioFocus(req); floatAudio = req
+            } else if (!on && floatAudio != null && android.os.Build.VERSION.SDK_INT >= 26) {
+                am.abandonAudioFocusRequest(floatAudio as android.media.AudioFocusRequest); floatAudio = null
+            }
+        } catch (x: Exception) {}
+    }
+    private fun clearFloats() {
+        val wm = getSystemService(WINDOW_SERVICE) as android.view.WindowManager
+        for (v in floatViews.values) try { wm.removeView(v) } catch (x: Exception) {}
+        floatViews.clear(); holdAudio(false)
     }
 
     /** 打开留白的专注界面；万一打不开，退回桌面兜底。 */
