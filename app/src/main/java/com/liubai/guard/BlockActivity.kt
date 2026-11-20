@@ -32,6 +32,8 @@ class BlockActivity : ComponentActivity() {
         finish()
     }
 
+    override fun onResume() { super.onResume(); GuardService.instance?.uncover() }
+
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) { override fun handleOnBackPressed() = home() })

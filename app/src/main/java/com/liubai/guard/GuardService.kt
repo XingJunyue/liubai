@@ -290,7 +290,9 @@ class GuardService : AccessibilityService() {
     private fun preempt(e: AccessibilityEvent) {
         val said = e.text.map { it.toString() } + listOfNotNull(e.contentDescription?.toString()) +
             (try { e.source?.let { listOfNotNull(it.text?.toString(), it.contentDescription?.toString()) } } catch (x: Exception) { null } ?: emptyList())
-        val pkg = tapped(said, guardedLabels()) ?: return
+        val labels = guardedLabels()
+        if (labels.isEmpty()) return
+        val pkg = tapped(said, labels) ?: run { Diag.log("桌面点击「${said.joinToString("|").take(40)}」"); return }
         val why = reason(pkg) ?: return
         Diag.log("桌面点了 $pkg，已到点（$why），直接挡")
         block(pkg, why, early = true)
@@ -469,6 +471,7 @@ class GuardService : AccessibilityService() {
         if (now - lastBlock < 600) return
         lastBlock = now
         lastBlockPkg = pkg
+        cover()
         // 连点：挡完一两秒内它又冒出来（桌面点得快、动画还没走完），再挡一次
         for (d in longArrayOf(700, 1600)) h.postDelayed({ if (fg == pkg) reason(pkg)?.let { block(pkg, it) } }, d)
         if (Virt.isVirt(pkg)) {
@@ -512,6 +515,37 @@ class GuardService : AccessibilityService() {
         }
         fg = packageName   // 挡住后前台就是留白自己，等无障碍事件更新，不再用延迟的系统记录反复判断
         passPkg = null
+    }
+
+    /**
+     * 先盖一层全屏遮罩（无障碍自己的窗口，不用等活动启动，几乎是立刻出现），
+     * 挡住应用的画面，等提示页出来再撤掉。
+     */
+    private var coverView: android.view.View? = null
+    private val uncoverLater = Runnable { uncover() }
+    private fun cover() {
+        try {
+            if (coverView == null) {
+                val v = android.view.View(this).apply { setBackgroundColor(0xFFF8E6D8.toInt()) }
+                val lp = android.view.WindowManager.LayoutParams(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    android.graphics.PixelFormat.OPAQUE)
+                (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).addView(v, lp)
+                coverView = v
+            }
+            h.removeCallbacks(uncoverLater)
+            h.postDelayed(uncoverLater, 2500)   // 兜底：提示页没出来也不会一直盖着
+        } catch (x: Exception) {}
+    }
+    /** 提示页 / 专注页出来了：撤掉遮罩。 */
+    fun uncover() {
+        h.removeCallbacks(uncoverLater)
+        val v = coverView ?: return
+        coverView = null
+        try { (getSystemService(WINDOW_SERVICE) as android.view.WindowManager).removeView(v) } catch (x: Exception) {}
     }
 
     /** 打开留白的专注界面；万一打不开，退回桌面兜底。 */
