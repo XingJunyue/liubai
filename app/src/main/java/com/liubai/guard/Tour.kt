@@ -47,6 +47,7 @@ object Tour {
     val WHATS_NEW = listOf(
         Release("sys-pass", listOf(
             TourPage("系", "系统服务不拦", "专注、无敌模式和所有上课时段（重要、普通、水课）里，系统设置、谷歌服务（GMS）、华为 HMS 这类系统服务都直接放行，水课也不再先停一下。防卸载的保护照旧。", "focus"),
+            TourPage("搜", "白名单可以搜索", "无敌模式的白名单顶上加了搜索框，输入应用名或包名就能找到。系统设置和系统服务已经默认放行，不用再勾。", "focus"),
         )),
         Release("eams-direct", listOf(
             TourPage("导", "树维教务直接导入", "用树维 eams 的学校（如电子科技大学），登录后不用打开课表页面，直接点「导入课表」就会自己去取课表。", "table:1"),

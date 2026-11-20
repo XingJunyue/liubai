@@ -58,3 +58,11 @@ SOFTWARE.
 
 ## NEU 教务课表导出脚本（greasyfork 573005）— MIT
 - 东北大学金智教务的接口参考，见 `Jw.kt` 开头说明（此前版本已有）。
+
+
+## 白噪音录音（Blanket 项目素材，https://github.com/rafaelmardojai/blanket/blob/main/SOUNDS_LICENSING.md）
+- Birds — kvgarlic (CC0)；Boat — Falcet (CC0)；Stream — gluckose (CC0)；Wind — felix.blume (CC0)
+- City — gezortenplotz (CC BY)；Rain — alex36917 (CC BY)；Storm — Digifish music (CC BY)；Waves — Luftrum (CC BY)；Train — SDLx (CC BY 3.0)
+- Coffee Shop — stephan；Fireplace — ezwa；Summer night — Lisa Redfern（Public Domain）
+- 剪辑：Porrumentzio。白、粉、棕噪音为留白实时合成，未使用 Blanket 的 CC BY-SA 噪音文件。
+- CC BY 素材需署名：应用内「关于与更新」页底部有署名，不要删。

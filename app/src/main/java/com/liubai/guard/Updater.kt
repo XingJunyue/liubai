@@ -285,6 +285,10 @@ fun AboutScreen() {
                 android.widget.Toast.makeText(c, tr("已复制"), android.widget.Toast.LENGTH_SHORT).show()
             }
         }
+        Spacer(Modifier.height(14.dp))
+        // 白噪音录音署名（CC BY 素材要求注明作者）；来源 Blanket 项目 SOUNDS_LICENSING.md
+        Text(tr("声音素材") + "：Blanket — kvgarlic, Falcet, felix.blume, gluckose (CC0); gezortenplotz, alex36917, Digifish music, Luftrum (CC BY), SDLx (CC BY 3.0); stephan, ezwa, Lisa Redfern (Public Domain)",
+            fontSize = 11.sp, color = C.Faint, lineHeight = 16.sp)
         Spacer(Modifier.height(24.dp))
     }
 }

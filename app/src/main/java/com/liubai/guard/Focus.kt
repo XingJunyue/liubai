@@ -669,20 +669,28 @@ fun WhitelistScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) { apps = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Apps.launchable(c) } }
     val sel = remember { mutableStateListOf<String>().apply { addAll(Focus.whitelist(c)) } }
     val ess = remember { Focus.essentials(c) }
+    var q by remember { mutableStateOf("") }
     androidx.activity.compose.BackHandler { Focus.setWhitelist(c, sel.toSet()); onBack() }
     Column(Modifier.fillMaxSize().padding(horizontal = 22.dp)) {
         Text(tr("‹ 完成"), fontSize = 15.sp, color = C.Soft, modifier = Modifier.padding(top = 14.dp)
             .clip(RoundedCornerShape(10.dp)).clickable { Focus.setWhitelist(c, sel.toSet()); onBack() }.padding(vertical = 4.dp))
         Text(tr("白名单"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 10.dp))
-        Text(tr("无敌模式下只有这些能打开。电话、短信、输入法已默认放行。"), fontSize = 14.sp, color = C.Soft,
+        Text(tr("无敌模式下只有这些能打开。电话、短信、输入法、系统设置和系统服务已默认放行。"), fontSize = 14.sp, color = C.Soft,
             lineHeight = 21.sp, modifier = Modifier.padding(top = 4.dp))
+        Box(Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Sand).padding(horizontal = 16.dp, vertical = 13.dp)) {
+            if (q.isEmpty()) Text(tr("搜索应用"), fontSize = 14.sp, color = C.Faint)
+            androidx.compose.foundation.text.BasicTextField(q, { q = it }, singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth())
+        }
         val list = apps
         if (list == null) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 androidx.compose.material3.CircularProgressIndicator(color = C.Clay)
             }
         } else {
-            val shown = list.filter { it.pkg !in ess }.sortedBy { if (it.pkg in sel) 0 else 1 }
+            val sorted = remember(list) { list.filter { it.pkg !in ess && !Focus.systemService(c, it.pkg) }.sortedBy { if (it.pkg in sel) 0 else 1 } }
+            val k = q.trim()
+            val shown = if (k.isEmpty()) sorted else sorted.filter { it.label.contains(k, ignoreCase = true) || it.pkg.contains(k, ignoreCase = true) }
             androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f).padding(top = 10.dp)) {
                 items(shown.size, key = { shown[it].pkg }) { i ->
                     val a = shown[i]
