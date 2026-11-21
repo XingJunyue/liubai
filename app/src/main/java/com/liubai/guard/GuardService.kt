@@ -195,7 +195,6 @@ class GuardService : AccessibilityService() {
         flush()
         h.removeCallbacks(tick)
         h.removeCallbacks(dialogCheck)
-        h.removeCallbacks(armScan)
         clearFloats()
         try { unregisterReceiver(screen) } catch (x: Exception) {}
         super.onDestroy()
