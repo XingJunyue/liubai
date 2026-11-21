@@ -12,6 +12,20 @@ class SysPassTest {
         for (p in listOf("com.ss.android.ugc.aweme", "com.tencent.mm", "com.android.chrome", "com.android.vending",
             "com.google.android.youtube", "com.miui.gallery", "tv.danmaku.bili")) assertFalse(p, Focus.sysByName(p))
     }
+    @Test fun pickersAreSystem() {
+        for (p in listOf("com.android.photopicker", "com.google.android.providers.media.module", "com.android.intentresolver",
+            "com.google.android.documentsui")) assertTrue(p, Focus.sysByName(p))
+    }
+    @Test fun helperChain() {
+        assertTrue(Focus.helperPass(true, false, true, "com.android.camera"))
+        assertTrue(Focus.helperPass(true, false, true, "com.miui.gallery"))
+        assertFalse(Focus.helperPass(false, false, true, "com.android.camera"))
+        assertFalse(Focus.helperPass(true, true, true, "com.android.camera"))
+        assertFalse(Focus.helperPass(true, false, false, "com.tencent.mm"))
+        assertFalse(Focus.helperPass(true, false, true, "com.android.browser"))
+        assertFalse(Focus.helperPass(true, false, true, "com.xiaomi.market"))
+        assertFalse(Focus.helperPass(true, false, true, "com.miui.video"))
+    }
     @Test fun systemComponentsWithoutIcon() {
         assertTrue(Focus.sysByFlags(system = true, launchable = false))
         assertFalse(Focus.sysByFlags(system = true, launchable = true))

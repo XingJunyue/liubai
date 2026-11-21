@@ -72,6 +72,8 @@ class GuardService : AccessibilityService() {
 
     private val h = Handler(Looper.getMainLooper())
     private var fg: String? = null
+    /** 从放行的应用里跳出来的系统组件（相机、相册、选图、文件管理）：回到桌面前一路放行。 */
+    private val helpers = mutableSetOf<String>()
     private var lastTick = 0L
     private var pendMs = 0L
     private var pendPkg: String? = null
@@ -235,6 +237,12 @@ class GuardService : AccessibilityService() {
                 if (fg != null && fg != packageName && guarded(fg!!)) { lastWidget = 0L }  // 离开受守护应用，马上刷新一次
                 if (pkg == homePkg || (pkg != passPkg && pkg != packageName && guarded(pkg))) passPkg = null
                 val wasHot = hot()
+                val prev = fg
+                if (pkg == homePkg || "launcher" in pkg || pkg == "com.miui.home") helpers.clear()
+                else if (prev != null && Focus.helperPass(prev == packageName || prev in helpers || reason(prev) == null,
+                        prev == homePkg || "launcher" in prev || prev == "com.miui.home", Focus.systemApp(this, pkg), pkg)) {
+                    if (helpers.add(pkg)) Diag.log("从 $prev 跳到系统组件 $pkg，跟着放行")
+                } else if (!Focus.systemApp(this, pkg)) helpers.clear()
                 fg = pkg
                 if (guarded(pkg)) Diag.log("进入 $pkg（活动窗口 $act）")
                 if (pkg != packageName) { if (guarded(pkg)) enter(pkg) else inOpen = null }
@@ -317,6 +325,7 @@ class GuardService : AccessibilityService() {
     private fun reason(pkg: String): String? {
         if (pkg == packageName) return null
         if (updatePass(pkg)) return null
+        if (pkg in helpers) return null
         // 系统设置、GMS 等系统服务：专注和所有课程时段都不拦
         val sys = Focus.systemService(this, pkg)
         if (!sys && Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"

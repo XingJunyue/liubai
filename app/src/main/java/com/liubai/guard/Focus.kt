@@ -144,6 +144,10 @@ object Focus {
         "com.android.bluetooth", "com.android.nfc", "com.android.printspooler", "com.android.keychain", "com.android.certinstaller",
         "com.android.wallpaper.livepicker", "com.android.managedprovisioning", "com.google.android.apps.restore", "com.google.android.setupwizard",
         "com.android.provision", "com.android.credentialmanager", "com.android.shell",
+        // 选图 / 选文件 / 分享面板：白名单应用里上传图片、发文件时会跳到这些系统组件
+        "com.android.photopicker", "com.google.android.photopicker", "com.android.providers.media", "com.android.providers.media.module",
+        "com.google.android.providers.media.module", "com.android.intentresolver", "com.google.android.intentresolver",
+        "com.android.htmlviewer", "com.android.mtp", "com.android.externalstorage",
         // 华为 / 荣耀：HMS Core、账号、设置
         "com.huawei.hwid", "com.huawei.android.hwouc", "com.hihonor.id", "com.huawei.systemmanager", "com.hihonor.systemmanager",
         // 小米、OPPO、vivo、三星等的设置与系统服务
@@ -152,7 +156,7 @@ object Focus {
         "com.coloros.securitypermission", "com.oplus.appdetail", "com.iqoo.secure", "com.vivo.permissionmanager",
         "com.samsung.android.lool", "com.samsung.android.sm.devicesecurity", "com.samsung.android.app.settings.bixby",
         "com.meizu.safe", "com.zui.safecenter")
-    private val SYS_HINTS = listOf(".settings", "settings.", "permissioncontroller", "packageinstaller")
+    private val SYS_HINTS = listOf(".settings", "settings.", "permissioncontroller", "packageinstaller", "photopicker", "providers.media", "intentresolver", "documentsui")
     /** 看包名是否在系统服务名单里，或者带设置 / 权限 / 安装器字样（纯函数，单测）。 */
     fun sysByName(pkg: String) = pkg in SYS_PKGS || pkg.startsWith("com.google.android.gms") || SYS_HINTS.any { it in pkg }
     /** 系统自带、桌面上没有图标的后台组件（账号选择、授权弹窗等）也算系统服务；桌面有图标的系统应用（浏览器、相册、应用商店）不算。 */
@@ -166,9 +170,28 @@ object Focus {
                 val ai = pm.getApplicationInfo(pkg, 0)
                 val system = ai.flags and (android.content.pm.ApplicationInfo.FLAG_SYSTEM or android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                 sysByFlags(system, pm.getLaunchIntentForPackage(pkg) != null)
+            } catch (x: android.content.pm.PackageManager.NameNotFoundException) {
+                // 看不到的包 = 桌面上没图标的系统组件（有图标的应用都在清单 <queries> 里看得到），比如选图器
+                true
             } catch (x: Exception) { false }
         }
     }
+
+    /** 系统自带的应用（含桌面有图标的相机、相册、文件管理），或看不到的系统组件。 */
+    private val sysAppCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    fun systemApp(c: Context, pkg: String): Boolean {
+        if (systemService(c, pkg)) return true
+        return sysAppCache.getOrPut(pkg) {
+            try {
+                val ai = c.packageManager.getApplicationInfo(pkg, 0)
+                ai.flags and (android.content.pm.ApplicationInfo.FLAG_SYSTEM or android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            } catch (x: Exception) { false }
+        }
+    }
+    private val NO_HELPER = listOf("browser", "chrome", "market", "appstore", "vending", "gamecenter", "video", "music", "game")
+    /** 从放行的应用直接跳进系统应用（拍照、选图、选文件）就跟着放行；浏览器、应用商店、影音游戏不算（纯函数，单测）。 */
+    fun helperPass(prevAllowed: Boolean, prevHome: Boolean, nextSystem: Boolean, next: String) =
+        prevAllowed && !prevHome && nextSystem && NO_HELPER.none { it in next.lowercase() }
 
     /** 专注进行中，且选了「专注时锁住守护中的应用」。 */
     fun locking(c: Context) = phase(c) == WORK && lockApps(c)
