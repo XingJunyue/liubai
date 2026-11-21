@@ -16,4 +16,7 @@
     <string name="hush_name">Liubai · Notificaciones ocultas</string>
     <string name="w_today">Liubai · Hoy</string>
     <string name="w_min_left">min disponibles</string>
+    <string name="w_course4_name">Liubai · Horario 4×2</string>
+    <string name="w_course2_name">Liubai · Horario 2×2</string>
+    <string name="w_course">Clase actual y siguiente de hoy</string>
 </resources>

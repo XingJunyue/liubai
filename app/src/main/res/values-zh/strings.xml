@@ -16,4 +16,7 @@
     <string name="hush_name">留白 · 收起通知</string>
     <string name="w_today">留白 · 今天</string>
     <string name="w_min_left">分钟可用</string>
+    <string name="w_course4_name">留白 · 课表 4×2</string>
+    <string name="w_course2_name">留白 · 课表 2×2</string>
+    <string name="w_course">今天正在上和下一节的课</string>
 </resources>

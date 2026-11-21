@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -76,6 +77,9 @@ fun coursePalette(courses: List<Slot>): Map<String, Pair<Color, Color>> {
 }
 private fun colorOf(s: Slot, pal: Map<String, Pair<Color, Color>>) =
     if (s.color in COURSE_COLORS.indices) COURSE_COLORS[s.color] else pal[s.name.trim()] ?: COURSE_COLORS[Math.floorMod(s.name.trim().hashCode(), COURSE_COLORS.size)]
+
+/** 小部件用：这门课的（浅底, 深字）颜色，和课表里一致。 */
+fun courseColorArgb(s: Slot, all: List<Slot>): Pair<Int, Int> = colorOf(s, coursePalette(all)).let { it.first.toArgb() to it.second.toArgb() }
 
 private fun md(epochDay: Long): Pair<Int, Int> { val d = LocalDate.ofEpochDay(epochDay); return d.monthValue to d.dayOfMonth }
 private fun ymd(epochDay: Long): String { val d = LocalDate.ofEpochDay(epochDay); return "${d.year}/${d.monthValue}/${d.dayOfMonth}" }
@@ -556,6 +560,7 @@ private class Fit(val name: Int, val room: Int, val teacher: Int)
 @Composable
 private fun CourseBlock(k: Block, col: Pair<Color, Color>, m: Modifier, onClick: () -> Unit) {
     val (bg, fg) = col
+    val c0 = LocalContext.current
     val span = k.b - k.a + 1
     val tm = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -564,9 +569,11 @@ private fun CourseBlock(k: Block, col: Pair<Color, Color>, m: Modifier, onClick:
         .clickable { onClick() }) {
         if (k.on) Box(Modifier.fillMaxHeight().width(3.dp).background(fg.copy(alpha = 0.35f)))
         val tc = if (k.on) fg else C.Faint
+        val showLvl = Scenes.showLevel(c0)
+        val lvl = k.s.level.coerceIn(0, 2)
         val tag: String? = when {
             !k.on -> if (Tr.cjk) tr("非本周") else tr("非本周（短）")
-            k.s.level == 2 && span >= 2 -> if (Tr.cjk) Slot.LEVELS[2] else "!"
+            showLvl -> Slot.LEVELS[lvl]
             else -> null
         }
         val sName = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -597,9 +604,9 @@ private fun CourseBlock(k: Block, col: Pair<Color, Color>, m: Modifier, onClick:
                 if (fit.room > 0) Text(room, style = sRoom, color = tc.copy(alpha = 0.9f), maxLines = fit.room, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
                 if (fit.teacher > 0) Text(k.s.teacher, style = sTeach, color = tc.copy(alpha = 0.75f), maxLines = fit.teacher, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
                 Spacer(Modifier.weight(1f))
-                if (tag != null) Text(tag, fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1, softWrap = false,
-                    color = if (k.on) Color.White else C.Soft,
-                    modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(if (k.on) fg.copy(alpha = 0.75f) else C.Card).padding(horizontal = 4.dp, vertical = 2.dp))
+                if (tag != null) Text(tag, fontSize = 9.sp, lineHeight = 11.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip,
+                    color = if (k.on) Color(LevelTag.FG[lvl]) else C.Soft, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(if (k.on) Color(LevelTag.BG[lvl]) else C.Card).padding(horizontal = 4.dp, vertical = 2.dp))
             }
         }
     }
@@ -761,6 +768,8 @@ fun TermSheet(openPicker: Boolean = false, onChange: () -> Unit, onClose: () -> 
     var total by remember { mutableStateOf(Scenes.totalWeeks(c)) }
     var off by remember { mutableStateOf(Scenes.showOff(c)) }
     var wk by remember { mutableStateOf(Scenes.showWeekend(c)) }
+    var lvA by remember { mutableStateOf(Scenes.showLevel(c)) }
+    var lvW by remember { mutableStateOf(Scenes.widgetLevel(c)) }
     var pick by remember { mutableStateOf(openPicker) }
     LaunchedEffect(openPicker) { if (openPicker) pick = true }
     fun reload() { term = Scenes.termStart(c); week = Scenes.weekNow(c); onChange() }
@@ -790,6 +799,8 @@ fun TermSheet(openPicker: Boolean = false, onChange: () -> Unit, onClose: () -> 
             }
             Toggle(tr("显示周末"), tr("周末有课时总会显示"), wk) { wk = it; Scenes.setShowWeekend(c, it); onChange() }
             Toggle(tr("显示非本周的课"), tr("淡色显示，标「非本周」"), off) { off = it; Scenes.setShowOff(c, it); onChange() }
+            Toggle(tr("课块上标出等级"), tr("重要、普通、水课各一种颜色"), lvA) { lvA = it; Scenes.setShowLevel(c, it); onChange() }
+            Toggle(tr("小部件上标出等级"), tr("课表小部件里当前和下一节课的等级"), lvW) { lvW = it; Scenes.setWidgetLevel(c, it) }
             if (term >= 0) Text(tr("不分周次（每周都一样）"), fontSize = 13.sp, color = C.Soft,
                 modifier = Modifier.padding(top = 14.dp).clip(RoundedCornerShape(10.dp)).clickable { Scenes.setTermStart(c, -1); reload() }.padding(6.dp))
         }

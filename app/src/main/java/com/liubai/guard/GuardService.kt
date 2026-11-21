@@ -65,9 +65,6 @@ class GuardService : AccessibilityService() {
             "자동 실행", "배터리", "백그라운드", "알림")
         private val A11Y = listOf("无障碍", "Accessibility", "Accessibilité", "Bedienungshilfen", "Accesibilidad", "ユーザー補助", "접근성")
         private val CANCEL = listOf("取消", "Cancel", "Annuler", "Abbrechen", "Cancelar", "キャンセル", "취소")
-        // 桌面长按菜单里一定会有的系统项：和留白的快捷方式同时出现才算长按了留白
-        private val MENU = listOf("卸载", "应用信息", "分享", "编辑", "移除", "删除", "App info", "Uninstall", "Infos sur l'appli", "Désinstaller",
-            "App-Info", "Deinstallieren", "Info. de la app", "Información de la aplicación", "Desinstalar", "アプリ情報", "アンインストール", "앱 정보", "제거")
     }
 
     private val h = Handler(Looper.getMainLooper())
@@ -125,8 +122,6 @@ class GuardService : AccessibilityService() {
     }
 
     private var lastWin = 0L
-    private var longSelf = false
-    private var longAt = 0L
     private var contentOn = false
     private var sysSeen: String? = null
     private var sysSince = 0L
@@ -134,7 +129,7 @@ class GuardService : AccessibilityService() {
     /** 只有停在桌面 / 设置 / 安装器时才监听「界面内容变化」（用来抓卸载确认框），刷视频时不监听，省电。 */
     private fun watchContent(pkg: String?) {
         // 桌面不监听（桌面的时钟、动画会不停触发，最耗电）；桌面的卸载靠「点击」事件就能挡住
-        val want = pkg != null && locked() && (sensitive(pkg) || pkg == homePkg || "launcher" in pkg || pkg == "com.miui.home")
+        val want = pkg != null && locked() && sensitive(pkg)
         if (want == contentOn) return
         contentOn = want
         try {
@@ -250,30 +245,13 @@ class GuardService : AccessibilityService() {
             }
             fg?.let { p -> reason(p)?.let { block(p, it, behind = behind && p == pkg) } }
             floatScan()
-            // 桌面弹出长按菜单 / 卸载框时只有「窗口变化」事件，没有包名：在桌面就盯一下
-            val f0 = fg
-            if (!st && f0 != null && (f0 == homePkg || "launcher" in f0) && locked()) {
-                Diag.log("桌面窗口变化 ${try { windows.joinToString(",") { "${it.root?.packageName}:${it.title ?: ""}" } } catch (x: Exception) { "?" }}")
-                armLauncher(); guardDialog()
-            }
             }
         }
         // 卸载锁开着：任何应用的窗口一变就扫一眼（窗口变化不频繁，耗电很少）
         if ((st || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) && evPkg != packageName && locked()) guardDialog()
-        if (evPkg != null && (sensitive(evPkg) || evPkg == homePkg || "launcher" in evPkg || evPkg == "com.miui.home")) {
+        if (evPkg != null && sensitive(evPkg)) {
             if (e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
                 Diag.log("事件 ${AccessibilityEvent.eventTypeToString(e.eventType).removePrefix("TYPE_")} $evPkg ${e.className ?: ""} 「${(e.text.joinToString(" ") + " " + (e.contentDescription ?: "")).trim().take(40)}」")
-            // 桌面长按图标：记住按的是不是留白（小米桌面弹出的卸载菜单只有图标，没有字）
-            if (e.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
-                val said = e.text.joinToString(" ") + " " + (e.contentDescription ?: "")
-                longSelf = getString(R.string.app_name) in said
-                longAt = SystemClock.elapsedRealtime()
-                // 卸载锁开着：长按留白的图标就直接挡回去（小米桌面的卸载不弹确认框，点了就没了，只能在长按这一步拦）
-                if (longSelf && (evPkg == homePkg || "launcher" in evPkg) && locked()) { Diag.log("长按了留白图标，挡回去"); bounce() }
-            }
-            // 桌面上任何点按 / 长按 / 拖动后的 20 秒都盯一下：有的桌面长按、点「卸载」都不报事件
-            if ((evPkg == homePkg || "launcher" in evPkg) && e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-                locked()) armLauncher()
             if (locked()) {
                 if (e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) guardClick(e)
                 else if (e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) laterDialog()
@@ -441,6 +419,7 @@ class GuardService : AccessibilityService() {
         if (t != day) { day = t; flush(); Widgets.updateAll(this) }
         // 熄屏时什么都不做（小部件也看不见，不用刷新）
         if (!::pm.isInitialized || !pm.isInteractive) { flush(); passPkg = null; return }
+        try { CourseWidgets.tick(this) } catch (x: Exception) {}
         if (hot() || floatViews.isNotEmpty()) floatScan()
         // 正在用受守护的应用时，小部件 1 分钟跟一次；平时 5 分钟一次（内容没变就不重绘）
         val hot = fg?.let { it != packageName && guarded(it) } == true
@@ -696,35 +675,12 @@ class GuardService : AccessibilityService() {
         // 开自启动、电池不限制、后台运行、通知这些是帮留白活得更稳的设置，从来不挡
         if (FRIENDLY.any { it.lowercase() in low }) return
         val danger = DANGER.any { it.lowercase() in low } || REMOVE.any { it.lowercase() in low }
-        // 桌面：刚长按过留白，再点卸载 / 垃圾桶
-        if ((e.packageName?.toString() == homePkg || "launcher" in (e.packageName?.toString() ?: "")) && longSelf && SystemClock.elapsedRealtime() - longAt < 15_000 && danger) { bounce(); return }
         val root = try { rootInActiveWindow } catch (x: Exception) { null } ?: return
         val label = getString(R.string.app_name)
         if (!hasText(root, label)) return
         if (adminAdd(root)) return
         val isSwitch = e.className?.toString()?.let { "Switch" in it || "CheckBox" in it || "Toggle" in it } == true
         if (danger || (isSwitch && A11Y.any { hasText(root, it) })) bounce()
-    }
-
-    /**
-     * 桌面平时不监听界面变化（省电），所以桌面弹出的「卸载留白？」框收不到事件。
-     * 在桌面长按过图标（含拖到卸载区）后的 20 秒里，每半秒看一眼有没有这个框，看到就挡。
-     */
-    private var armUntil = 0L
-    private val armScan = object : Runnable {
-        override fun run() {
-            if (SystemClock.elapsedRealtime() > armUntil) return
-            val f = fg
-            if (f != null && f != homePkg && "launcher" !in f && !sensitive(f)) { armUntil = 0L; return }
-            if (locked()) { lastScan = 0L; guardDialog() }
-            h.postDelayed(this, 500)
-        }
-    }
-    private fun armLauncher() {
-        if (SystemClock.elapsedRealtime() > armUntil) Diag.log("开始盯桌面弹框")
-        val fresh = SystemClock.elapsedRealtime() > armUntil
-        armUntil = SystemClock.elapsedRealtime() + 20_000
-        if (fresh) { h.removeCallbacks(armScan); h.postDelayed(armScan, 300) }
     }
 
     /** 先直接点确认框里的「取消」，返回键关不掉的桌面弹框也能关掉。 */
@@ -770,7 +726,6 @@ class GuardService : AccessibilityService() {
     private fun adminAdd(root: android.view.accessibility.AccessibilityNodeInfo) =
         !Admin.on(this) && (hasText(root, "激活此") || hasText(root, "Activate this") || hasText(root, "Activer") || hasText(root, "aktivieren") || hasText(root, "Activar") || hasText(root, "有効にする") || hasText(root, "활성화") || hasText(root, "启用此设备管理") || hasText(root, "设备管理应用") || hasText(root, "安全服务"))
 
-    private var lastHomeDump = 0L
     /** 同一行字里同时有「留白」和卸载 / 删除等字样（图标名字单独一行，不会误挡）。 */
     private fun sameNode(root: android.view.accessibility.AccessibilityNodeInfo, label: String): Boolean {
         val ns = try { root.findAccessibilityNodeInfosByText(label) } catch (x: Exception) { return false }
@@ -787,25 +742,14 @@ class GuardService : AccessibilityService() {
         val roots = (try { windows.mapNotNull { it.root } } catch (x: Exception) { emptyList() }) +
             listOfNotNull(try { rootInActiveWindow } catch (x: Exception) { null })
         val label = getString(R.string.app_name)
-        val mark = getString(R.string.sc_focus)
         for (root in roots) {
             val pk = root.packageName?.toString() ?: continue
             if (pk == packageName || pk in IGNORE || "inputmethod" in pk || "keyboard" in pk) continue
             val launcher = pk == homePkg || "launcher" in pk || pk == "com.miui.home"
             // 系统会缓存窗口内容：不刷新就看不到刚弹出来的菜单
             try { root.refresh() } catch (x: Exception) {}
-            if (launcher) {
-                // 桌面长按留白图标时，弹出的菜单里会有留白自己的快捷方式：看到它就说明正对着留白，菜单和拖去卸载都挡掉
-                if (hasText(root, mark) && MENU.any { hasText(root, it) }) { Diag.log("桌面弹出了留白的长按菜单，挡回去：${dump(root).take(160)}"); bounce(); return }
-                // 桌面自己弹的确认框：「卸载“留白”？」这类一句话里同时有名字和危险字
-                if (sameNode(root, label)) { Diag.log("桌面卸载确认框，挡回去：${dump(root).take(160)}"); bounce(); return }
-                if (now - lastHomeDump > 3000 && (hasText(root, "卸载") || hasText(root, "应用信息") || hasText(root, label))) {
-                    if (hasText(root, label) && !hasText(root, "卸载") && !hasText(root, "应用信息")) {} else
-                    { lastHomeDump = now; Diag.log("桌面弹框内容：${dump(root).take(300)}") }
-                }
-                if (false) { lastHomeDump = now; Diag.log("桌面出现卸载字样：${dump(root).take(300)}") }
-                continue
-            }
+            // 桌面不管：长按图标拦卸载在各家桌面上都拦不住，已去掉（设置、安全中心、安装器里的照旧）
+            if (launcher) continue
             // 只看系统的设置 / 安全中心 / 安装器 / 应用商店；聊天、浏览器里出现这些字不算
             val store = "market" in pk || "appstore" in pk || "vending" in pk
             if (!sensitive(pk) && !store) continue

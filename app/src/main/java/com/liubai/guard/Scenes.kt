@@ -105,6 +105,7 @@ object Scenes {
         val a = list(c, "active")
         val merged = a + d.filter { n -> a.none { it == n } }
         put(c, "desired", d); put(c, "active", merged)
+        try { CourseWidgets.update(c) } catch (x: Throwable) {}
     }
     /** 一键暂停课表（放假）：明天起生效；重新开启马上生效。 */
     fun enabled(c: Context) = p(c).getBoolean("onD", true)
@@ -120,13 +121,18 @@ object Scenes {
     // ---------- 周次 ----------
     /** 第 1 周周一（epoch 天）；-1 = 没设，所有课按每周都上。 */
     fun termStart(c: Context) = p(c).getLong("term", -1L)
-    fun setTermStart(c: Context, day: Long) = p(c).edit().putLong("term", day).apply()
+    fun setTermStart(c: Context, day: Long) { p(c).edit().putLong("term", day).apply(); try { CourseWidgets.update(c) } catch (x: Throwable) {} }
     fun totalWeeks(c: Context) = p(c).getInt("weeks", 20)
     fun setTotalWeeks(c: Context, n: Int) = p(c).edit().putInt("weeks", n.coerceIn(1, 30)).apply()
     fun showOff(c: Context) = p(c).getBoolean("showOff", true)
     fun setShowOff(c: Context, v: Boolean) = p(c).edit().putBoolean("showOff", v).apply()
     fun showWeekend(c: Context) = p(c).getBoolean("weekend", true)
     fun setShowWeekend(c: Context, v: Boolean) = p(c).edit().putBoolean("weekend", v).apply()
+    /** 课块 / 小部件上标出水课、普通、重要。 */
+    fun showLevel(c: Context) = p(c).getBoolean("lvlApp", true)
+    fun setShowLevel(c: Context, v: Boolean) = p(c).edit().putBoolean("lvlApp", v).apply()
+    fun widgetLevel(c: Context) = p(c).getBoolean("lvlWidget", true)
+    fun setWidgetLevel(c: Context, v: Boolean) { p(c).edit().putBoolean("lvlWidget", v).apply(); CourseWidgets.update(c) }
     fun gridView(c: Context) = p(c).getBoolean("grid", true)
     fun setGridView(c: Context, v: Boolean) = p(c).edit().putBoolean("grid", v).apply()
 

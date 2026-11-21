@@ -16,4 +16,7 @@
     <string name="hush_name">留白 · 通知をしまう</string>
     <string name="w_today">留白 · 今日</string>
     <string name="w_min_left">分 利用可能</string>
+    <string name="w_course4_name">留白 · 時間割 4×2</string>
+    <string name="w_course2_name">留白 · 時間割 2×2</string>
+    <string name="w_course">今日の今の授業と次の授業</string>
 </resources>

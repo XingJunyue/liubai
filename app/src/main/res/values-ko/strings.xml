@@ -16,4 +16,7 @@
     <string name="hush_name">Liubai · 알림 숨기기</string>
     <string name="w_today">Liubai · 오늘</string>
     <string name="w_min_left">분 사용 가능</string>
+    <string name="w_course4_name">Liubai · 시간표 4×2</string>
+    <string name="w_course2_name">Liubai · 시간표 2×2</string>
+    <string name="w_course">오늘 지금 수업과 다음 수업</string>
 </resources>

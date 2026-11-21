@@ -16,4 +16,7 @@
     <string name="hush_name">Liubai · Mitteilungen stumm</string>
     <string name="w_today">Liubai · Heute</string>
     <string name="w_min_left">Min. verfügbar</string>
+    <string name="w_course4_name">Liubai · Stundenplan 4×2</string>
+    <string name="w_course2_name">Liubai · Stundenplan 2×2</string>
+    <string name="w_course">Aktuelle und nächste Stunde heute</string>
 </resources>
