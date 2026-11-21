@@ -18,5 +18,5 @@
     <string name="w_min_left">min left</string>
     <string name="w_course4_name">Liubai · Timetable 4×2</string>
     <string name="w_course2_name">Liubai · Timetable 2×2</string>
-    <string name="w_course">Today's current and next class</string>
+    <string name="w_course">Today\'s current and next class</string>
 </resources>
