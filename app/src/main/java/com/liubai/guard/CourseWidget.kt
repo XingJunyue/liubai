@@ -77,6 +77,7 @@ object CourseWidgets {
         val list = today(c)
         val now = plan(list, Rules.nowMin())
         val all = Scenes.desired(c).filter { it.kind == "course" }
+        alarm(c, list)
         for ((ids, wide) in listOf(big to true, small to false)) for (id in ids) {
             try {
                 val o = m.getAppWidgetOptions(id)
@@ -88,6 +89,24 @@ object CourseWidgets {
                 m.updateAppWidget(id, v)
             } catch (x: Exception) { Diag.log("课表小部件画不出来：${x.message}") }
         }
+    }
+
+    const val REFRESH = "com.liubai.guard.COURSE_WIDGET_REFRESH"
+
+    /** 守护服务没在跑时的兜底：在下一次上课 / 下课的那一分钟叫醒自己重画（系统省电时可能晚一点）。 */
+    private fun alarm(c: Context, list: List<Slot>) {
+        try {
+            val m = Rules.nowMin()
+            val next = list.flatMap { listOf(it.from, it.to) }.filter { it > m }.minOrNull() ?: (24 * 60)
+            val cal = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 1); set(java.util.Calendar.MILLISECOND, 0)
+                add(java.util.Calendar.MINUTE, next)
+            }
+            val pi = PendingIntent.getBroadcast(c, 71, Intent(c, CourseWidget4::class.java).setAction(REFRESH),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val am = c.getSystemService(android.app.AlarmManager::class.java) ?: return
+            am.setAndAllowWhileIdle(android.app.AlarmManager.RTC, cal.timeInMillis, pi)
+        } catch (x: Exception) {}
     }
 
     // ---------------- 画图 ----------------
@@ -281,6 +300,10 @@ object CourseWidgets {
 }
 
 class CourseWidget4 : AppWidgetProvider() {
+    override fun onReceive(c: Context, i: Intent) {
+        if (i.action == CourseWidgets.REFRESH) { CourseWidgets.update(c); return }
+        super.onReceive(c, i)
+    }
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = run { Keep.heal(c); CourseWidgets.update(c) }
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.update(c)
 }

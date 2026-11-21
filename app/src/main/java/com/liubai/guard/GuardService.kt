@@ -114,9 +114,22 @@ class GuardService : AccessibilityService() {
     }
     /** 马上检查一次，并按新的节奏排下一次。 */
     private fun kick() { h.removeCallbacks(tick); h.post(tick) }
+    /** 课表小部件：亮屏时卡在每分钟的第 0 秒刷新，不跟 15 秒一次的定时器走，免得慢半拍。 */
+    private val minute = object : Runnable {
+        override fun run() {
+            h.removeCallbacks(this)
+            if (!::pm.isInitialized || !pm.isInteractive) return
+            try { CourseWidgets.tick(this@GuardService) } catch (x: Exception) {}
+            h.postDelayed(this, 60_000 - System.currentTimeMillis() % 60_000 + 150)
+        }
+    }
     private val screen = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: android.content.Context?, i: Intent?) {
             if (i?.action == Intent.ACTION_USER_PRESENT) Hist.add(this@GuardService, "pick", 1)
+            if (i?.action == Intent.ACTION_SCREEN_ON || i?.action == Intent.ACTION_USER_PRESENT) {
+                try { CourseWidgets.update(this@GuardService) } catch (x: Exception) {}
+                h.post(minute)
+            }
             kick()
         }
     }
@@ -156,6 +169,7 @@ class GuardService : AccessibilityService() {
         Diag.init(this)
         Diag.log("服务连上")
         running = true
+        h.post(minute)
         instance = this
         pm = getSystemService(POWER_SERVICE) as PowerManager
         lastTick = SystemClock.elapsedRealtime()
@@ -195,6 +209,7 @@ class GuardService : AccessibilityService() {
         flush()
         h.removeCallbacks(tick)
         h.removeCallbacks(dialogCheck)
+        h.removeCallbacks(minute)
         clearFloats()
         try { unregisterReceiver(screen) } catch (x: Exception) {}
         super.onDestroy()
