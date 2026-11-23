@@ -285,41 +285,62 @@ fun GroupSheet(start: Group, onClose: () -> Unit) {
 fun BedScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         Spacer(Modifier.height(8.dp))
-        Text(tr("睡前锁定"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
+        Text(tr("睡眠守护"), fontSize = 27.sp, fontWeight = FontWeight.Bold, color = C.Ink)
         Spacer(Modifier.height(16.dp))
         BedCard()
     }
 }
 
-/** 睡前锁定的设置卡片，「时段」页里也用它。 */
+/** 一段睡眠守护显示的名字。 */
+fun bedLabel(b: Bed): String = if (b.id == Bed.MAIN) tr("睡前") else b.name.ifBlank { tr("睡眠") }
+
+/** 睡眠守护的设置卡片（睡前 + 自己加的午睡等），「时段」页里也用它。 */
 @Composable
 fun BedCard() {
     val c = LocalContext.current
-    val today = remember { mutableStateOf(Store.bedActive(c)) }
-    var want by remember { mutableStateOf(Store.bedDesired(c)) }
+    var today by remember { mutableStateOf(Store.bedsActive(c)) }
+    val want = remember { mutableStateListOf<Bed>().apply { addAll(Store.bedsDesired(c)) } }
     var saved by remember { mutableStateOf<String?>(null) }
-    // 开始 20:00–次日 2:00，结束 5:00–10:00
-    val startVal = if (want.from < 12 * 60) want.from + 1440 else want.from
 
     Column {
-        Text(tr("到点后，所有守护中的应用和分组都不开放，第二天早上自动恢复。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
-        SoftCard(Modifier.fillMaxWidth()) {
-            Toggle(tr("开启睡前锁定"), if (today.value.on) tr("今天在执行：{0}–{1}", Rules.clock(today.value.from), Rules.clock(today.value.to)) else tr("今天还没开启"), want.on) {
-                want = want.copy(on = it); saved = null
+        Text(tr("到点后，所有守护中的应用和分组都不开放。除了睡前，还能加午睡等别的时段，每段单独设时间和星期。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 12.dp))
+        for (i in want.indices) {
+            val b = want[i]
+            val act = today.firstOrNull { it.id == b.id }
+            SoftCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                if (b.id == Bed.MAIN) Text(tr("睡前"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
+                else Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Sand).padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    if (b.name.isEmpty()) Text(tr("名字，比如 午睡"), fontSize = 14.sp, color = C.Faint)
+                    BasicTextField(b.name, { want[i] = want[i].copy(name = it.take(12)); saved = null }, singleLine = true,
+                        textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth())
+                }
+                Toggle(if (b.id == Bed.MAIN) tr("开启睡前锁定") else tr("开启这段"),
+                    if (act?.on == true) tr("今天在执行：{0}–{1}", Rules.clock(act.from), Rules.clock(act.to)) else tr("今天还没开启"), b.on) {
+                    want[i] = want[i].copy(on = it); saved = null
+                }
+                if (b.on) {
+                    StepSlider(tr("几点开始"), b.from, 0..(23 * 60 + 45), 15, "", { Rules.clock(it) }) { want[i] = want[i].copy(from = it); saved = null }
+                    StepSlider(tr("几点结束"), b.to, 0..(23 * 60 + 45), 15, "", { Rules.clock(it) }) { want[i] = want[i].copy(to = it); saved = null }
+                    DayPicker(b.days) { want[i] = want[i].copy(days = it); saved = null }
+                }
+                if (b.id != Bed.MAIN) Text(tr("删除（明天生效）"), color = C.Soft, fontSize = 14.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp).clickable { want.removeAt(i); saved = null }.padding(10.dp))
             }
-            if (want.on) {
-                StepSlider(tr("几点开始"), startVal, 20 * 60..26 * 60, 15, "", { Rules.clock(it) }) { want = want.copy(from = it % 1440); saved = null }
-                StepSlider(tr("几点结束"), want.to, 5 * 60..10 * 60, 15, "", { Rules.clock(it) }) { want = want.copy(to = it); saved = null }
-            }
-            Note(tr("今天只能更严：开启、提前开始、推迟结束立刻生效；关闭、缩短要等明天 0:00。"))
-            Spacer(Modifier.height(14.dp))
-            PrimaryButton(tr("保存")) {
-                val eff = Store.setBed(c, want)
-                today.value = eff
-                saved = if (eff == want) tr("已生效") else tr("已保存，放宽的部分明天 0:00 生效")
-                Widgets.updateAll(c)
-            }
-            saved?.let { Text(it, fontSize = 13.sp, color = C.SageInk, modifier = Modifier.padding(top = 10.dp).align(Alignment.CenterHorizontally)) }
         }
+        Text(tr("＋ 加一段，比如午睡"), fontSize = 14.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 12.dp).clip(RoundedCornerShape(12.dp)).clickable {
+                want.add(Bed(on = true, from = 12 * 60 + 30, to = 14 * 60, id = "b" + System.currentTimeMillis(), name = tr("午睡"))); saved = null
+            }.padding(vertical = 8.dp, horizontal = 4.dp))
+        Note(tr("今天只能更严：开启、新加一段、提前开始、推迟结束、多选星期立刻生效；关闭、缩短、删除要等明天 0:00。"))
+        Spacer(Modifier.height(14.dp))
+        val ok = want.all { !it.on || (it.from != it.to && it.days.isNotEmpty()) }
+        PrimaryButton(tr("保存"), enabled = ok) {
+            val w = want.map { it.copy(name = it.name.trim()) }
+            val eff = Store.setBeds(c, w)
+            today = eff
+            saved = if (eff == w) tr("已生效") else tr("已保存，放宽的部分明天 0:00 生效")
+            Widgets.updateAll(c)
+        }
+        saved?.let { Text(it, fontSize = 13.sp, color = C.SageInk, modifier = Modifier.padding(top = 10.dp).align(Alignment.CenterHorizontally)) }
     }
 }

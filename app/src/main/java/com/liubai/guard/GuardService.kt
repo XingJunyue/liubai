@@ -335,8 +335,7 @@ class GuardService : AccessibilityService() {
         if (System.currentTimeMillis() < Store.sosUntil(this, pkg)) return null
         if (!sys && Focus.sessionBlocks(Scenes.lockNow(this), strictNow, inWl)) return "scene"
         val m = Rules.nowMin()
-        val bed = Store.bedActive(this)
-        if (bed.on && Rules.inWin(m, bed.from, bed.to)) return "bed"
+        if (Store.bedNow(this) != null) return "bed"
         if (lim != null) {
             val x = Store.extraActive(this, pkg)
             if (x.mode == 3) return "hard"

@@ -51,12 +51,43 @@ data class Group(val id: String, val name: String, val pkgs: List<String>, val m
     }
 }
 
-/** 睡前锁定：这段时间里所有守护中的应用都不开放，可以跨过午夜。 */
-data class Bed(val on: Boolean = false, val from: Int = 23 * 60, val to: Int = 7 * 60) {
-    fun json(): JSONObject = JSONObject().put("on", on).put("f", from).put("t", to)
+/**
+ * 睡眠守护的一段（睡前、午睡……）：这段时间里所有守护中的应用都不开放，可以跨过午夜。
+ * id "bed" 是原来的睡前锁定；其他段由用户自己加，名字、时间、星期都能改。
+ * days：1=周一…7=周日；跨午夜的段，过了 0 点的那一半算前一天的。
+ */
+data class Bed(val on: Boolean = false, val from: Int = 23 * 60, val to: Int = 7 * 60,
+               val id: String = MAIN, val name: String = "", val days: Set<Int> = ALL) {
+    fun json(): JSONObject = JSONObject().put("on", on).put("f", from).put("t", to).put("id", id).put("n", name)
+        .put("d", JSONArray(days.sorted()))
+
+    /** 星期 d、第 m 分钟是否在这一段里（纯函数，单测）。 */
+    fun hit(d: Int, m: Int): Boolean {
+        if (!on || from == to) return false
+        val prev = if (d == 1) 7 else d - 1
+        return if (from < to) d in days && m in from until to else (d in days && m >= from) || (prev in days && m < to)
+    }
 
     companion object {
-        fun of(j: JSONObject) = Bed(j.optBoolean("on", false), j.optInt("f", 23 * 60), j.optInt("t", 7 * 60))
+        const val MAIN = "bed"
+        val ALL = (1..7).toSet()
+        fun of(j: JSONObject): Bed {
+            val a = j.optJSONArray("d")
+            val d = if (a == null) ALL else (0 until a.length()).map { a.optInt(it) }.filter { it in 1..7 }.toSet()
+            return Bed(j.optBoolean("on", false), j.optInt("f", 23 * 60), j.optInt("t", 7 * 60),
+                j.optString("id", MAIN).ifEmpty { MAIN }, j.optString("n", ""), if (a == null) ALL else d)
+        }
+        /** 读存储：新格式是数组；旧版本存的是单个对象（只有睡前那一段），照样认。永远带着睡前那一段。 */
+        fun list(raw: String?): List<Bed> {
+            val t = raw?.trim().orEmpty()
+            val l = try {
+                if (t.startsWith("[")) JSONArray(t).let { a -> (0 until a.length()).map { of(a.getJSONObject(it)) } }
+                else if (t.startsWith("{")) listOf(of(JSONObject(t))) else emptyList()
+            } catch (x: Exception) { emptyList() }
+            val u = l.distinctBy { it.id }
+            return if (u.any { it.id == MAIN }) u else listOf(Bed()) + u
+        }
+        fun listJson(l: List<Bed>): String = JSONArray().also { a -> l.forEach { a.put(it.json()) } }.toString()
     }
 }
 
@@ -101,9 +132,16 @@ object Rules {
 
     fun stricterBed(a: Bed, d: Bed): Bed = when {
         !a.on -> d
-        !d.on -> a
-        within(a.from to a.to, d.from to d.to) -> d
-        else -> a
+        !d.on -> a.copy(name = d.name)
+        within(a.from to a.to, d.from to d.to) && d.days.containsAll(a.days) -> d
+        else -> a.copy(name = d.name)
+    }
+
+    /** 多段睡眠守护：同一段取更严的；新加的段马上生效；删掉的段今天照旧，明天 0:00 才去掉。 */
+    fun stricterBeds(a: List<Bed>, d: List<Bed>): List<Bed> {
+        val am = a.associateBy { it.id }
+        val dIds = d.map { it.id }.toSet()
+        return d.map { y -> am[y.id]?.let { stricterBed(it, y) } ?: y } + a.filter { it.id !in dIds }
     }
 
     fun summary(x: Extra): List<String> {

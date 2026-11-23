@@ -221,8 +221,11 @@ fun Home(onAdd: () -> Unit, onMenu: () -> Unit, onFocus: () -> Unit = {}, poemsO
             Spacer(Modifier.height(if (topKeys.isEmpty()) 12.dp else (12 + 42 * topKeys.maxOf { Look.scale(it) } + 14).dp))
             Text(date, fontSize = 13.sp, color = C.Faint, letterSpacing = 0.6.sp)
             GreetingArea(poemsOn)
-            val bed = remember(tick) { Store.bedActive(c) }
-            if (bed.on) Chip(tr("睡前锁定 {0}–{1}", Rules.clock(bed.from), Rules.clock(bed.to)))
+            val beds = remember(tick) { Store.bedsActive(c).filter { it.on } }
+            if (beds.isNotEmpty()) Row {
+                for (b in beds) Chip(if (b.id == Bed.MAIN) tr("睡前锁定 {0}–{1}", Rules.clock(b.from), Rules.clock(b.to))
+                    else tr("{0}锁定 {1}–{2}", bedLabel(b), Rules.clock(b.from), Rules.clock(b.to)))
+            }
 
             if (!usageOk) {
                 Spacer(Modifier.height(18.dp))
