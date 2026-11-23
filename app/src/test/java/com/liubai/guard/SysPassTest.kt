@@ -45,3 +45,14 @@ class TappedTest {
         org.junit.Assert.assertNull(GuardService.tapped(listOf(""), labels))
     }
 }
+
+class WhitelistSyncTest {
+    @Test fun strictSessionsLetWhitelistThrough() {
+        // 重要课 / 无敌模式：白名单里的应用（哪怕也在守护中）不被这一层挡
+        assertFalse(Focus.sessionBlocks(lock = true, strict = true, inWhitelist = true))
+        assertTrue(Focus.sessionBlocks(lock = true, strict = true, inWhitelist = false))
+        // 普通课 / 普通专注：照旧挡守护中的应用
+        assertTrue(Focus.sessionBlocks(lock = true, strict = false, inWhitelist = true))
+        assertFalse(Focus.sessionBlocks(lock = false, strict = true, inWhitelist = true))
+    }
+}

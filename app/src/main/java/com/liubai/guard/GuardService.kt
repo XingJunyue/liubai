@@ -320,16 +320,20 @@ class GuardService : AccessibilityService() {
         if (pkg in helpers) return null
         // 系统设置、GMS 等系统服务：专注和所有课程时段都不拦
         val sys = Focus.systemService(this, pkg)
-        if (!sys && Focus.scholarLocking(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss()) return "scholar"
+        // 无敌模式和重要课共用同一份白名单，规则也一致：白名单里的应用不受这段专注 / 上课本身的锁定
+        val inWl = pkg in Focus.whitelist(this)
+        val scholarNow = Focus.scholarLocking(this)
+        val strictNow = Scenes.strictNow(this)
+        if (!sys && scholarNow && !inWl && pkg !in scholarEss()) return "scholar"
         // 重要的课：和无敌模式一样，只开放白名单
-        if (!sys && Scenes.strictNow(this) && pkg !in Focus.whitelist(this) && pkg !in scholarEss() && pkg != homePkg) return "class"
+        if (!sys && strictNow && !inWl && pkg !in scholarEss() && pkg != homePkg) return "class"
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
         if (lim == null && groups.isEmpty()) return null
-        if (!sys && Focus.locking(this)) return "focus"
+        if (!sys && Focus.sessionBlocks(Focus.locking(this), scholarNow, inWl)) return "focus"
         // 紧急用一下：这几分钟放行（专注、重要课不放）
         if (System.currentTimeMillis() < Store.sosUntil(this, pkg)) return null
-        if (!sys && Scenes.lockNow(this)) return "scene"
+        if (!sys && Focus.sessionBlocks(Scenes.lockNow(this), strictNow, inWl)) return "scene"
         val m = Rules.nowMin()
         val bed = Store.bedActive(this)
         if (bed.on && Rules.inWin(m, bed.from, bed.to)) return "bed"
