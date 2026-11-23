@@ -90,7 +90,7 @@ object Store {
     }
 
     /** 防反悔内置、不外显：只要今天还有应用在守护，就挡住关闭守护和卸载。想彻底停用，移除所有应用，明天 0:00 起自动解除。 */
-    fun protectActive(c: Context): Boolean = active(c).isNotEmpty() || groupsActive(c).isNotEmpty() || bedActive(c).on
+    fun protectActive(c: Context): Boolean = active(c).isNotEmpty() || groupsActive(c).isNotEmpty() || bedsActive(c).any { it.on }
 
     // ---------- 守护方式（每个应用） ----------
     private val xmemo = java.util.concurrent.ConcurrentHashMap<String, Map<String, Extra>>()
@@ -162,24 +162,26 @@ object Store {
     }
 
     // ---------- 睡前锁定 ----------
-    private val bmemo = java.util.concurrent.ConcurrentHashMap<String, Bed>()
-    private fun bed(c: Context, key: String): Bed {
+    private val bmemo = java.util.concurrent.ConcurrentHashMap<String, List<Bed>>()
+    private fun beds(c: Context, key: String): List<Bed> {
         roll(c)
         val raw = p(c).getString(key, "{}") ?: "{}"
         bmemo[raw]?.let { return it }
-        val b = try { Bed.of(JSONObject(raw)) } catch (x: Exception) { Bed() }
+        val b = Bed.list(raw)
         if (bmemo.size > 8) bmemo.clear()
         bmemo[raw] = b
         return b
     }
-    fun bedActive(c: Context) = bed(c, "ba")
-    fun bedDesired(c: Context): Bed = if (p(c).contains("bd")) bed(c, "bd") else bedActive(c)
+    /** 今天在执行的各段睡眠守护（睡前、午睡……）。 */
+    fun bedsActive(c: Context) = beds(c, "ba")
+    fun bedsDesired(c: Context): List<Bed> = if (p(c).contains("bd")) beds(c, "bd") else bedsActive(c)
+    /** 现在落在哪一段里；不在任何一段就是 null。 */
+    fun bedNow(c: Context): Bed? { val d = Tasks.weekday(); val m = Rules.nowMin(); return bedsActive(c).firstOrNull { it.hit(d, m) } }
 
     @Synchronized
-    fun setBed(c: Context, want: Bed): Bed {
-        val a = bedActive(c)
-        val eff = Rules.stricterBed(a, want)
-        p(c).edit().putString("bd", want.json().toString()).putString("ba", eff.json().toString()).apply()
+    fun setBeds(c: Context, want: List<Bed>): List<Bed> {
+        val eff = Rules.stricterBeds(bedsActive(c), want)
+        p(c).edit().putString("bd", Bed.listJson(want)).putString("ba", Bed.listJson(eff)).apply()
         return eff
     }
 

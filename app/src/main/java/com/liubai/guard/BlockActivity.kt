@@ -41,11 +41,12 @@ class BlockActivity : ComponentActivity() {
         val name = Apps.info(this, pkg).label
         val why = intent.getStringExtra("why") ?: "daily"
         val x = Store.extraActive(this, pkg)
-        val bed = Store.bedActive(this)
+        val bed = Store.bedNow(this) ?: Store.bedsActive(this).first()
         val (title, sub) = when {
             why == "scholar" -> tr("无敌模式") to tr("专注还剩 {0} 分钟，这会儿只开放白名单里的应用", (Focus.leftMs(this) / 60_000L + 1))
             why == "focus" -> tr("正在专注") to tr("这个番茄还剩 {0} 分钟，先把手上的事做完", (Focus.leftMs(this) / 60_000L + 1))
-            why == "bed" -> tr("该睡觉啦") to tr("睡前锁定到 {0}，{1} 明早再见", Rules.clock(bed.to), name)
+            why == "bed" && bed.id == Bed.MAIN -> tr("该睡觉啦") to tr("睡前锁定到 {0}，{1} 明早再见", Rules.clock(bed.to), name)
+            why == "bed" -> tr("{0}时间到啦", bedLabel(bed)) to tr("{0}锁定到 {1}，{2} 到时候再见", bedLabel(bed), Rules.clock(bed.to), name)
             why == "class" || why == "scene" -> {
                 val s = Scenes.now(this)
                 (if (why == "class") tr("正在上课") else "${s?.name ?: tr("这段时间")}") to tr("{0} {1} 结束，{2} 到时候再见", s?.name ?: "", Rules.clock(s?.to ?: 0), name).trim()

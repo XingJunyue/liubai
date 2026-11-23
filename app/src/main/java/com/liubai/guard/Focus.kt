@@ -196,6 +196,12 @@ object Focus {
     /** 专注进行中，且选了「专注时锁住守护中的应用」。 */
     fun locking(c: Context) = phase(c) == WORK && lockApps(c)
 
+    /**
+     * 专注锁定 / 上课锁定这一层要不要挡（纯函数，单测）。
+     * 无敌模式、重要课时白名单里的应用照常能开（两边同一份白名单）；每日额度、睡前锁定等应用自己的限制照旧。
+     */
+    fun sessionBlocks(lock: Boolean, strict: Boolean, inWhitelist: Boolean) = lock && !(strict && inWhitelist)
+
     fun start(c: Context, ph: Int) {
         p(c).edit().putInt("phase", ph).putLong("end", System.currentTimeMillis() + len(c, ph) * 60_000L).putLong("paused", -1L).apply()
     }
