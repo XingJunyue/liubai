@@ -177,6 +177,8 @@ object Store {
     fun bedsDesired(c: Context): List<Bed> = if (p(c).contains("bd")) beds(c, "bd") else bedsActive(c)
     /** 现在落在哪一段里；不在任何一段就是 null。 */
     fun bedNow(c: Context): Bed? { val d = Tasks.weekday(); val m = Rules.nowMin(); return bedsActive(c).firstOrNull { it.hit(d, m) } }
+    /** 现在正落在开了好梦模式的那一段里；没有就是 null。 */
+    fun goodnightNow(c: Context): Bed? = bedNow(c)?.takeIf { it.gn }
 
     @Synchronized
     fun setBeds(c: Context, want: List<Bed>): List<Bed> {

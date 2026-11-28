@@ -27,7 +27,13 @@ object Hush {
     /** 现在要收起多久（毫秒），0 表示不收。 */
     fun holdMs(c: Context): Long {
         if (!granted(c)) return 0
-        if (on(c) && Focus.phase(c) == Focus.WORK) return Focus.leftMs(c).coerceAtLeast(60_000L)
+        var hold = 0L
+        if (on(c) && Focus.phase(c) == Focus.WORK) hold = Focus.leftMs(c).coerceAtLeast(60_000L)
+        // 好梦模式里开了「收起通知」：剩下的好梦时间里都收着；gn 关掉后 gh 残留也不算数。
+        // 和专注同时在时取更长的那一段，免得专注结束就把通知放回来吵醒人。
+        val bed = Store.bedNow(c)
+        if (bed != null && bed.gn && bed.gh) hold = maxOf(hold, bed.leftMin(Tasks.weekday(), Rules.nowMin()) * 60_000L)
+        if (hold > 0) return hold
         return Scenes.quietLeftMs(c)
     }
 

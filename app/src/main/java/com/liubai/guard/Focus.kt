@@ -202,6 +202,13 @@ object Focus {
      */
     fun sessionBlocks(lock: Boolean, strict: Boolean, inWhitelist: Boolean) = lock && !(strict && inWhitelist)
 
+    /**
+     * 好梦模式要不要挡（纯函数，单测）。
+     * sys 系统服务、essential 必需应用（电话、短信、桌面、输入法等）不挡，其他的在好梦时间里都挡，
+     * 不看它在不在守护名单里。白名单和无敌模式那一套不管这里。
+     */
+    fun goodnightBlocks(sys: Boolean, goodnight: Boolean, essential: Boolean) = goodnight && !sys && !essential
+
     fun start(c: Context, ph: Int) {
         p(c).edit().putInt("phase", ph).putLong("end", System.currentTimeMillis() + len(c, ph) * 60_000L).putLong("paused", -1L).apply()
     }

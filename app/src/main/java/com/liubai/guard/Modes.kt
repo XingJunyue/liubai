@@ -322,6 +322,13 @@ fun BedCard() {
                     StepSlider(tr("几点开始"), b.from, 0..(23 * 60 + 45), 15, "", { Rules.clock(it) }) { want[i] = want[i].copy(from = it); saved = null }
                     StepSlider(tr("几点结束"), b.to, 0..(23 * 60 + 45), 15, "", { Rules.clock(it) }) { want[i] = want[i].copy(to = it); saved = null }
                     DayPicker(b.days) { want[i] = want[i].copy(days = it); saved = null }
+                    Toggle(tr("好梦模式"), tr("这段时间里，所有应用都不开放，只留电话、短信这些必需的"), b.gn) {
+                        want[i] = want[i].copy(gn = it); saved = null
+                    }
+                    if (b.gn) key(b.id) {
+                        HushToggle(tr("好梦里收起通知"), tr("白名单、电话和闹钟照常"), { _ -> b.gh },
+                            { _, v -> want[i] = want[i].copy(gh = v); saved = null })
+                    }
                 }
                 if (b.id != Bed.MAIN) Text(tr("删除（明天生效）"), color = C.Soft, fontSize = 14.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp).clickable { want.removeAt(i); saved = null }.padding(10.dp))
@@ -331,7 +338,7 @@ fun BedCard() {
             modifier = Modifier.padding(bottom = 12.dp).clip(RoundedCornerShape(12.dp)).clickable {
                 want.add(Bed(on = true, from = 12 * 60 + 30, to = 14 * 60, id = "b" + System.currentTimeMillis(), name = tr("午睡"))); saved = null
             }.padding(vertical = 8.dp, horizontal = 4.dp))
-        Note(tr("今天只能更严：开启、新加一段、提前开始、推迟结束、多选星期立刻生效；关闭、缩短、删除要等明天 0:00。"))
+        Note(tr("今天只能更严：开启、新加一段、提前开始、推迟结束、多选星期、打开好梦模式立刻生效；关闭、缩短、删除、关掉好梦模式要等明天 0:00。"))
         Spacer(Modifier.height(14.dp))
         val ok = want.all { !it.on || (it.from != it.to && it.days.isNotEmpty()) }
         PrimaryButton(tr("保存"), enabled = ok) {

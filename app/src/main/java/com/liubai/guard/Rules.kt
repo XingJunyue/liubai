@@ -55,17 +55,26 @@ data class Group(val id: String, val name: String, val pkgs: List<String>, val m
  * 睡眠守护的一段（睡前、午睡……）：这段时间里所有守护中的应用都不开放，可以跨过午夜。
  * id "bed" 是原来的睡前锁定；其他段由用户自己加，名字、时间、星期都能改。
  * days：1=周一…7=周日；跨午夜的段，过了 0 点的那一半算前一天的。
+ * gn 好梦模式：打开后这段时间里所有应用都不开放（系统服务、电话短信等必需的除外），
+ *   不看它在不在守护名单里；gh 好梦里收起通知：打开后这段时间的通知先收起来，睡醒再放回来。
  */
 data class Bed(val on: Boolean = false, val from: Int = 23 * 60, val to: Int = 7 * 60,
-               val id: String = MAIN, val name: String = "", val days: Set<Int> = ALL) {
+               val id: String = MAIN, val name: String = "", val days: Set<Int> = ALL,
+               val gn: Boolean = false, val gh: Boolean = false) {
     fun json(): JSONObject = JSONObject().put("on", on).put("f", from).put("t", to).put("id", id).put("n", name)
-        .put("d", JSONArray(days.sorted()))
+        .put("d", JSONArray(days.sorted())).put("gn", gn).put("gh", gh)
 
     /** 星期 d、第 m 分钟是否在这一段里（纯函数，单测）。 */
     fun hit(d: Int, m: Int): Boolean {
         if (!on || from == to) return false
         val prev = if (d == 1) 7 else d - 1
         return if (from < to) d in days && m in from until to else (d in days && m >= from) || (prev in days && m < to)
+    }
+
+    /** 星期 d、第 m 分钟这段还剩几分钟；不在段里就是 0（纯函数，单测）。 */
+    fun leftMin(d: Int, m: Int): Int {
+        if (!hit(d, m)) return 0
+        return if (from < to) to - m else if (m >= from) 1440 - m + to else to - m
     }
 
     companion object {
@@ -75,7 +84,8 @@ data class Bed(val on: Boolean = false, val from: Int = 23 * 60, val to: Int = 7
             val a = j.optJSONArray("d")
             val d = if (a == null) ALL else (0 until a.length()).map { a.optInt(it) }.filter { it in 1..7 }.toSet()
             return Bed(j.optBoolean("on", false), j.optInt("f", 23 * 60), j.optInt("t", 7 * 60),
-                j.optString("id", MAIN).ifEmpty { MAIN }, j.optString("n", ""), if (a == null) ALL else d)
+                j.optString("id", MAIN).ifEmpty { MAIN }, j.optString("n", ""), if (a == null) ALL else d,
+                j.optBoolean("gn", false), j.optBoolean("gh", false))
         }
         /** 读存储：新格式是数组；旧版本存的是单个对象（只有睡前那一段），照样认。永远带着睡前那一段。 */
         fun list(raw: String?): List<Bed> {
@@ -130,11 +140,15 @@ object Rules {
             ask = a.ask || d.ask, again = minPos(a.again, d.again))
     }
 
-    fun stricterBed(a: Bed, d: Bed): Bed = when {
-        !a.on -> d
-        !d.on -> a.copy(name = d.name)
-        within(a.from to a.to, d.from to d.to) && d.days.containsAll(a.days) -> d
-        else -> a.copy(name = d.name)
+    /**
+     * 今天已生效的 a，加上想改成的 d，今天实际执行哪一份：只采纳更严的部分。
+     * 时间段、星期沿用原来的规则；好梦 gn / 收起通知 gh 单独算：打开立刻生效，关掉等明天 0:00。
+     */
+    fun stricterBed(a: Bed, d: Bed): Bed {
+        if (!a.on) return d
+        if (!d.on) return a.copy(name = d.name)
+        val win = if (within(a.from to a.to, d.from to d.to) && d.days.containsAll(a.days)) d else a
+        return win.copy(name = d.name, gn = a.gn || d.gn, gh = a.gh || d.gh)
     }
 
     /** 多段睡眠守护：同一段取更严的；新加的段马上生效；删掉的段今天照旧，明天 0:00 才去掉。 */

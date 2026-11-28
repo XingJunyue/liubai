@@ -52,7 +52,7 @@ fun SettingsScreen(poemsOn: Boolean, onPoems: (Boolean) -> Unit) {
 
         SectionTitle(tr("新手教程"))
         SoftCard(Modifier.fillMaxWidth()) {
-            StatusRow(tr("新手教程"), tr("再看一遍专注、管控、课表和教务导入怎么用"), null, tr("打开 ›")) { Tour.show.value = "first" }
+            StatusRow(tr("新手教程"), tr("再看一遍选应用、专注、睡眠守护这些怎么用"), null, tr("打开 ›")) { Tour.show.value = "first" }
             StatusRow(tr("这个版本的新功能"), tr("看看这次更新加了什么"), null, tr("打开 ›")) { Tour.show.value = "new" }
         }
         Spacer(Modifier.height(18.dp))

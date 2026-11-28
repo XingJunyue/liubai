@@ -327,6 +327,9 @@ class GuardService : AccessibilityService() {
         if (!sys && scholarNow && !inWl && pkg !in scholarEss()) return "scholar"
         // 重要的课：和无敌模式一样，只开放白名单
         if (!sys && strictNow && !inWl && pkg !in scholarEss() && pkg != homePkg) return "class"
+        // 好梦模式：睡前 / 午睡段里开了好梦，所有应用都不开放（系统服务、必需应用除外），
+        // 不看它在不在守护名单里；放在「只剩守护中的应用才继续查」之前，紧急用 5 分钟也不能绕过它
+        if (Focus.goodnightBlocks(sys, Store.goodnightNow(this) != null, pkg in scholarEss() || pkg == homePkg)) return "goodnight"
         val lim = Store.active(this)[pkg]
         val groups = Store.groupsActive(this).filter { pkg in it.pkgs }
         if (lim == null && groups.isEmpty()) return null
@@ -451,7 +454,7 @@ class GuardService : AccessibilityService() {
         // 无障碍给的前台更实时；系统用量记录有几秒延迟，只在拿不到时兜底，避免挡完又反复挡
         val cur = fg ?: Virt.map(sys)
         HushWatch.check(this)
-        if (cur != null && (Focus.scholarLocking(this) || Scenes.strictNow(this))) reason(cur)?.let { r -> if (r == "scholar" || r == "class") { block(cur, r); return } }
+        if (cur != null && (Focus.scholarLocking(this) || Scenes.strictNow(this) || Store.goodnightNow(this) != null)) reason(cur)?.let { r -> if (r == "scholar" || r == "class" || r == "goodnight") { block(cur, r); return } }
         if (cur != null && cur != packageName && guarded(cur)) {
             reason(cur)?.let { block(cur, it); return }
             watch(cur)

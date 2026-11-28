@@ -80,6 +80,26 @@ class SleepGuardTest {
         assertTrue(bed.hit(5, 23 * 60 + 30)); assertTrue(bed.hit(6, 60)); assertFalse(bed.hit(5, 60)); assertFalse(bed.hit(4, 23 * 60 + 30))
         assertFalse(nap.copy(on = false).hit(1, 800))
     }
+    @Test fun roundTripKeepsGoodnight() {
+        val b = Bed(true, 23 * 60, 7 * 60, Bed.MAIN, "", Bed.ALL, gn = true, gh = true)
+        org.junit.Assert.assertEquals(listOf(b), Bed.list(Bed.listJson(listOf(b))))
+        // 旧版本存的 JSON 没有 gn/gh，读出来默认关
+        val old = Bed.list("""{"on":true,"f":1380,"t":420}""")[0]
+        assertFalse(old.gn); assertFalse(old.gh)
+    }
+    @Test fun leftMinCountsDown() {
+        val bed = Bed(true, 23 * 60, 7 * 60, days = setOf(5))   // 只有周五晚上
+        org.junit.Assert.assertEquals(450, bed.leftMin(5, 23 * 60 + 30))  // 23:30 → 剩 7.5 小时
+        org.junit.Assert.assertEquals(360, bed.leftMin(6, 60))            // 周六 1:00，是周五那段的后半夜
+        org.junit.Assert.assertEquals(1, bed.leftMin(6, 6 * 60 + 59))
+        org.junit.Assert.assertEquals(0, bed.leftMin(6, 7 * 60))          // 到点
+        org.junit.Assert.assertEquals(0, bed.leftMin(5, 60))              // 周五 1:00 不在段里
+        org.junit.Assert.assertEquals(0, bed.copy(on = false).leftMin(5, 23 * 60 + 30))
+        val nap = Bed(true, 750, 840, "b1", "午睡", setOf(1, 2, 3, 4, 5))
+        org.junit.Assert.assertEquals(40, nap.leftMin(1, 800))
+        org.junit.Assert.assertEquals(0, nap.leftMin(1, 840))
+        org.junit.Assert.assertEquals(0, nap.leftMin(6, 800))
+    }
     @Test fun onlyStricterToday() {
         val a = listOf(Bed(true, 23 * 60, 7 * 60))
         val nap = Bed(true, 750, 840, "b1", "午睡")
@@ -92,5 +112,29 @@ class SleepGuardTest {
         // 提前开始 = 更严：马上生效
         val early = a[0].copy(from = 22 * 60)
         org.junit.Assert.assertEquals(early, Rules.stricterBed(a[0], early))
+    }
+}
+
+class GoodnightTest {
+    @Test fun stricterGoodnight() {
+        val a = Bed(true, 23 * 60, 7 * 60)
+        // 打开好梦：立刻生效
+        org.junit.Assert.assertEquals(a.copy(gn = true), Rules.stricterBed(a, a.copy(gn = true)))
+        // 关掉好梦 / 收起通知：今天不变，明天 0:00 才生效
+        val on = a.copy(gn = true, gh = true)
+        org.junit.Assert.assertEquals(on, Rules.stricterBed(on, on.copy(gn = false)))
+        org.junit.Assert.assertEquals(on, Rules.stricterBed(on, on.copy(gh = false)))
+        // 打开好梦的同时缩短时段（放宽时间）：时间今天不变，好梦照样立刻开
+        org.junit.Assert.assertEquals(a.copy(gn = true), Rules.stricterBed(a, a.copy(from = 23 * 60 + 40, gn = true)))
+        // 加长时间（更严）同时关掉好梦：时间今天就变，好梦今天还开着
+        org.junit.Assert.assertEquals(Bed(true, 22 * 60, 7 * 60, gn = true, gh = true),
+            Rules.stricterBed(on, on.copy(from = 22 * 60, gn = false)))
+    }
+    @Test fun goodnightBlocks() {
+        assertTrue(Focus.goodnightBlocks(sys = false, goodnight = true, essential = false))
+        assertFalse(Focus.goodnightBlocks(sys = true, goodnight = true, essential = false))
+        assertFalse(Focus.goodnightBlocks(sys = false, goodnight = true, essential = true))
+        assertFalse(Focus.goodnightBlocks(sys = false, goodnight = false, essential = false))
+        assertFalse(Focus.goodnightBlocks(sys = true, goodnight = false, essential = true))
     }
 }

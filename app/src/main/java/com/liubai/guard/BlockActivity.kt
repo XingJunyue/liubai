@@ -45,6 +45,7 @@ class BlockActivity : ComponentActivity() {
         val (title, sub) = when {
             why == "scholar" -> tr("无敌模式") to tr("专注还剩 {0} 分钟，这会儿只开放白名单里的应用", (Focus.leftMs(this) / 60_000L + 1))
             why == "focus" -> tr("正在专注") to tr("这个番茄还剩 {0} 分钟，先把手上的事做完", (Focus.leftMs(this) / 60_000L + 1))
+            why == "goodnight" -> tr("好梦时间") to tr("好梦守护到 {0}，{1} 明早再见", Rules.clock(bed.to), name)
             why == "bed" && bed.id == Bed.MAIN -> tr("该睡觉啦") to tr("睡前锁定到 {0}，{1} 明早再见", Rules.clock(bed.to), name)
             why == "bed" -> tr("{0}时间到啦", bedLabel(bed)) to tr("{0}锁定到 {1}，{2} 到时候再见", bedLabel(bed), Rules.clock(bed.to), name)
             why == "class" || why == "scene" -> {
@@ -95,8 +96,8 @@ class BlockActivity : ComponentActivity() {
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        // 紧急用一下：每周几次，等 20 秒，放行 5 分钟；专注、无敌模式、重要课不行
-                        val canSos = why !in setOf("focus", "scholar", "class") && Store.sosMax(this@BlockActivity) > 0
+                        // 紧急用一下：每周几次，等 20 秒，放行 5 分钟；专注、无敌模式、重要课、好梦模式不行
+                        val canSos = why !in setOf("focus", "scholar", "class", "goodnight") && Store.sosMax(this@BlockActivity) > 0
                         var sos by remember { mutableStateOf(-1) }
                         val left = remember { Store.sosLeft(this@BlockActivity) }
                         if (sos > 0) LaunchedEffect(sos) { kotlinx.coroutines.delay(1000); sos-- }
